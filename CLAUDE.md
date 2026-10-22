@@ -135,6 +135,10 @@ adb shell settings get secure screensaver_components; adb shell settings get sec
 adb shell pm list packages -s     # system apps (-3 for the ones they installed)
 ```
 
+`tools/tv-report.sh <IP> [label]` runs these and more (memory per process, running services, storage, how apps are
+compiled, the brand's system apps with their uid and flags) into `reports/`, which isn't committed: run it before a
+change and after, and compare. It leaves out Wi-Fi networks, accounts and serial numbers.
+
 Then, in the code:
 
 - `HomeMode.DEBLOAT`: add the brand's promo, demo, store-mode and telemetry apps, one comment per line. Only those.

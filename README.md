@@ -200,6 +200,7 @@ It's your code, and Claude Code finds its way around it. Try:
 | [`web/tv.js`](web/tv.js) | The TV's apps and inputs, on LG and Samsung |
 | [`webos/build.py`](webos/build.py), [`webos/install.py`](webos/install.py) | The LG app package and its install |
 | [`tizen/build.py`](tizen/build.py) | The Samsung app package |
+| [`tools/tv-report.sh`](tools/tv-report.sh) | A read-only report of a Google TV (apps, memory, storage, home screen), to compare before and after a change |
 
 The website ([freemytv.io](https://freemytv.io)) is in [`docs/`](docs): plain HTML, CSS and JS on GitHub Pages.
 
