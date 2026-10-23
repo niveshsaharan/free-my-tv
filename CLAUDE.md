@@ -19,6 +19,8 @@ before you do it, and let them do the taps on the TV.
 io.freemytv`, and install Lumen as below: the TV asks again to allow debugging, and their shelf and Remote Buttons are
 picked again. Uninstalled before switching back? Its list of what it turned off is in `adb shell settings get global
 free_my_tv_disabled`: `adb shell pm enable` each one, then `adb shell settings delete global free_my_tv_disabled`.
+[`INSTALL-MY-TV.md`](INSTALL-MY-TV.md) is the owner's own step-by-step for this on their TV, with you pressing the
+remote's buttons over adb: when they point you to it, follow it (it says where it differs from this file).
 
 1. **Ask** for the TV's IP address and their city, if they didn't say.
 2. **Tools:** a JDK 17+, the Android SDK command-line tools (build-tools 34+, platform android-34) and adb. Check

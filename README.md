@@ -32,7 +32,7 @@ Open source. Built with Claude Code. One button to undo.
 
 About ten minutes. You need a Google TV or Android TV (Android 8 or newer) and a computer on the same Wi-Fi.
 
-> **Had Free My TV on this TV?** Lumen used to be called that, and it's a new app now. Switch the old one back first: on the TV, *Free My TV* → *Home Screen* → *Original*. Then remove it with `adb uninstall io.freemytv` (or in the TV's Settings → Apps), and install Lumen as below.
+> **Had Free My TV on this TV?** Lumen used to be called that, and it's a new app now. Switch the old one back first: on the TV, *Free My TV* → *Home Screen* → *Original*. Then remove it with `adb uninstall io.freemytv` (or in the TV's Settings → Apps), and install Lumen as below. Or hand [INSTALL-MY-TV.md](INSTALL-MY-TV.md) to your AI agent: it does all of this, and you only accept the TV's prompts.
 
 ### The easy way: an AI assistant
 
