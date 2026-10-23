@@ -217,7 +217,7 @@ final class Ui {
                 cat = Collections.emptyMap();
             }
         }
-        catalogue = cat;
+        catalogue = Brand.rename(cat, Brand.renamed() ? load("en") : null);
         locale = localeOf(lang);
         plurals = PluralRules.forLocale(locale);
         language = lang;

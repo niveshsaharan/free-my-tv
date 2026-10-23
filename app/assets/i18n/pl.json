@@ -156,6 +156,7 @@
  "animations|Faster": "Szybciej",
  "animations|Normal": "Normalne",
  "animations|Off": "Wyłączone",
+ "based on {app}": "na bazie {app}",
  "debugging is off on the TV (port 5555 closed)": "debugowanie jest wyłączone w telewizorze (port 5555 zamknięty)",
  "debugging permission wasn't accepted on the TV": "zgoda na debugowanie nie została zaakceptowana w telewizorze",
  "format|EEEE, MMMM d": "EEEE, d MMMM",

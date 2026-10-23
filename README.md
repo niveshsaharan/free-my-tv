@@ -177,6 +177,16 @@ It's your code, and Claude Code finds its way around it. Try:
 - *"Add Catalan."*
 - *"Switch to the night look an hour after sunset."*
 
+**Your own name, logo and color.** A `brand/` folder next to `build.sh` holds them, in `brand.properties`:
+
+```properties
+name=Lumen
+tagline=Light by day, dark by night
+accent=#0A84FF
+```
+
+and a `logo.png` with a transparent background (one color reads best). `python3 tools/make_art.py --brand` draws the TV's icon and banner from the logo (and a logo, if there is none), then `./build.sh` builds it in. The name replaces "Free My TV" wherever it shows, in every language. The app stays `io.freemytv`, so it installs over Free My TV as an update and keeps your settings. Delete the folder to go back to Free My TV.
+
 ## How it works
 
 - **A plain Android app, no Gradle, no libraries.** [`build.sh`](build.sh) runs aapt2 → javac → d8 → zipalign → apksigner and makes a 2 MB APK.
@@ -198,6 +208,7 @@ It's your code, and Claude Code finds its way around it. Try:
 | [`SettingsActivity.java`](app/src/io/freemytv/SettingsActivity.java) | The settings screen (the app's icon) |
 | [`Prefs.java`](app/src/io/freemytv/Prefs.java) | Settings changed on the TV |
 | [`Speed.java`](app/src/io/freemytv/Speed.java) | The Speed screen's choices and the apps it offers |
+| [`Brand.java`](app/src/io/freemytv/Brand.java) | Your name, accent and logo, from `brand/` |
 | [`RemoteKeys.java`](app/src/io/freemytv/RemoteKeys.java) | The TCL remote's app buttons |
 | [`Watchdog.java`](app/src/io/freemytv/Watchdog.java) | The safety net |
 | [`web/home.js`](web/home.js) | The home screen on LG TVs |

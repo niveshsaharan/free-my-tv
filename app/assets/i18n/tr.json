@@ -156,6 +156,7 @@
  "animations|Faster": "Daha hızlı",
  "animations|Normal": "Normal",
  "animations|Off": "Kapalı",
+ "based on {app}": "{app} tabanlı",
  "debugging is off on the TV (port 5555 closed)": "TV'de hata ayıklama kapalı (5555 bağlantı noktası kapalı)",
  "debugging permission wasn't accepted on the TV": "hata ayıklama izni TV'de kabul edilmedi",
  "format|EEEE, MMMM d": "d MMMM EEEE",

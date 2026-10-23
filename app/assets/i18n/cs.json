@@ -156,6 +156,7 @@
  "animations|Faster": "Rychlejší",
  "animations|Normal": "Normální",
  "animations|Off": "Vypnuto",
+ "based on {app}": "založeno na {app}",
  "debugging is off on the TV (port 5555 closed)": "ladění je na televizoru vypnuté (port 5555 je zavřený)",
  "debugging permission wasn't accepted on the TV": "ladění nebylo na televizoru povoleno",
  "format|EEEE, MMMM d": "EEEE d. MMMM",

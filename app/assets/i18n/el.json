@@ -156,6 +156,7 @@
  "animations|Faster": "Ταχύτερα",
  "animations|Normal": "Κανονικά",
  "animations|Off": "Ανενεργά",
+ "based on {app}": "βασισμένο στο {app}",
  "debugging is off on the TV (port 5555 closed)": "ο εντοπισμός σφαλμάτων είναι απενεργοποιημένος στην τηλεόραση (θύρα 5555 κλειστή)",
  "debugging permission wasn't accepted on the TV": "η άδεια εντοπισμού σφαλμάτων δεν έγινε αποδεκτή στην τηλεόραση",
  "format|EEEE, MMMM d": "EEEE d MMMM",

@@ -156,6 +156,7 @@
  "animations|Faster": "更快",
  "animations|Normal": "正常",
  "animations|Off": "关",
+ "based on {app}": "基于 {app}",
  "debugging is off on the TV (port 5555 closed)": "电视上的调试已关闭（端口 5555 未开放）",
  "debugging permission wasn't accepted on the TV": "电视上未接受调试授权",
  "format|EEEE, MMMM d": "M月d日 EEEE",

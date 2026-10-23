@@ -156,6 +156,7 @@
  "animations|Faster": "Быстрее",
  "animations|Normal": "Обычная",
  "animations|Off": "Выкл.",
+ "based on {app}": "на основе {app}",
  "debugging is off on the TV (port 5555 closed)": "отладка на телевизоре выключена (порт 5555 закрыт)",
  "debugging permission wasn't accepted on the TV": "на телевизоре не разрешена отладка",
  "format|EEEE, MMMM d": "EEEE, d MMMM",

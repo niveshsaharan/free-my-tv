@@ -356,13 +356,14 @@ final class HomeApps {
         synchronized (HomeApps.class) {
             TILES.keySet().removeIf(k -> k.contains(".") && !seen.contains(k));
         }
-        items.add(special(c, SETTINGS, "freemytv-settings", "Free My TV", "sparkles"));
+        items.add(special(c, SETTINGS, "freemytv-settings", Brand.NAME, "sparkles"));
         return items;
     }
 
     private static Item special(Context c, int kind, String key, String label, String symbol) {
         Item it = shortcut(kind, key, label, symbol);
-        it.tile = symbolTile(c, key, symbol);
+        it.tile = kind == SETTINGS && BrandConfig.LOGO ? brandTile(c, key) : null;
+        if (it.tile == null) it.tile = symbolTile(c, key, symbol);
         return it;
     }
 
@@ -897,6 +898,17 @@ final class HomeApps {
         if (TILES.containsKey(key)) return TILES.get(key);
         Bitmap b = darkTile();
         Symbols.draw(c, new Canvas(b), symbol, TILE_W / 2f, TILE_H / 2f, TILE_H * 0.36f, 0xF2FFFFFF);
+        b.setHasMipMap(true);
+        TILES.put(key, b);
+        return b;
+    }
+
+    /** Your brand's logo (brand/) on dark glass, lit from below in its accent: the settings card in All Apps. */
+    private static synchronized Bitmap brandTile(Context c, String key) {
+        if (TILES.containsKey(key)) return TILES.get(key);
+        Bitmap logo = Brand.logo(c, Math.round(TILE_H * 0.56f));
+        if (logo == null) return null;
+        Bitmap b = logoTile(logo, BrandConfig.ACCENT);
         b.setHasMipMap(true);
         TILES.put(key, b);
         return b;

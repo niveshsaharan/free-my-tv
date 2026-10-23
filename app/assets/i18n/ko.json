@@ -156,6 +156,7 @@
  "animations|Faster": "더 빠르게",
  "animations|Normal": "보통",
  "animations|Off": "끔",
+ "based on {app}": "{app} 기반",
  "debugging is off on the TV (port 5555 closed)": "TV에서 디버깅이 꺼져 있습니다(포트 5555 닫힘)",
  "debugging permission wasn't accepted on the TV": "TV에서 디버깅 권한이 허용되지 않았습니다",
  "format|EEEE, MMMM d": "M월 d일 EEEE",

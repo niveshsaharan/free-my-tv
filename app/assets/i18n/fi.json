@@ -156,6 +156,7 @@
  "animations|Faster": "Nopeampi",
  "animations|Normal": "Normaali",
  "animations|Off": "Pois",
+ "based on {app}": "pohjana {app}",
  "debugging is off on the TV (port 5555 closed)": "vianetsintä on pois päältä televisiossa (portti 5555 suljettu)",
  "debugging permission wasn't accepted on the TV": "vianetsintälupaa ei hyväksytty televisiossa",
  "format|EEEE, MMMM d": "EEEE d. MMMM",

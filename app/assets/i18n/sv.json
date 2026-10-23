@@ -156,6 +156,7 @@
  "animations|Faster": "Snabbare",
  "animations|Normal": "Normala",
  "animations|Off": "Av",
+ "based on {app}": "baserad på {app}",
  "debugging is off on the TV (port 5555 closed)": "felsökning är av på tv:n (port 5555 stängd)",
  "debugging permission wasn't accepted on the TV": "behörigheten för felsökning godkändes inte på tv:n",
  "format|EEEE, MMMM d": "EEEE d MMMM",

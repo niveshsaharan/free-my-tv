@@ -156,6 +156,7 @@
  "animations|Faster": "Lebih cepat",
  "animations|Normal": "Normal",
  "animations|Off": "Mati",
+ "based on {app}": "berbasis {app}",
  "debugging is off on the TV (port 5555 closed)": "debugging nonaktif di TV (port 5555 tertutup)",
  "debugging permission wasn't accepted on the TV": "izin debugging tidak diterima di TV",
  "format|EEEE, MMMM d": "EEEE, d MMMM",

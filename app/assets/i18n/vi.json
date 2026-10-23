@@ -156,6 +156,7 @@
  "animations|Faster": "Nhanh hơn",
  "animations|Normal": "Bình thường",
  "animations|Off": "Tắt",
+ "based on {app}": "dựa trên {app}",
  "debugging is off on the TV (port 5555 closed)": "gỡ lỗi đang tắt trên TV (cổng 5555 đóng)",
  "debugging permission wasn't accepted on the TV": "quyền gỡ lỗi chưa được chấp nhận trên TV",
  "format|EEEE, MMMM d": "EEEE, d MMMM",

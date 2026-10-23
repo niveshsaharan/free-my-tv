@@ -156,6 +156,7 @@
  "animations|Faster": "Mai rapide",
  "animations|Normal": "Normale",
  "animations|Off": "Dezactivate",
+ "based on {app}": "bazat pe {app}",
  "debugging is off on the TV (port 5555 closed)": "depanarea este dezactivată pe televizor (portul 5555 închis)",
  "debugging permission wasn't accepted on the TV": "permisiunea de depanare nu a fost acceptată pe televizor",
  "format|EEEE, MMMM d": "EEEE, d MMMM",

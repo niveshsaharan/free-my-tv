@@ -156,6 +156,7 @@
  "animations|Faster": "Faster",
  "animations|Normal": "Normal",
  "animations|Off": "Off",
+ "based on {app}": "based on {app}",
  "debugging is off on the TV (port 5555 closed)": "debugging is off on the TV (port 5555 closed)",
  "debugging permission wasn't accepted on the TV": "debugging permission wasn't accepted on the TV",
  "format|EEEE, MMMM d": "EEEE, MMMM d",

@@ -156,6 +156,7 @@
  "animations|Faster": "速く",
  "animations|Normal": "標準",
  "animations|Off": "オフ",
+ "based on {app}": "{app} ベース",
  "debugging is off on the TV (port 5555 closed)": "テレビのデバッグがオフです（ポート 5555 が閉じています）",
  "debugging permission wasn't accepted on the TV": "テレビでデバッグの許可が承認されませんでした",
  "format|EEEE, MMMM d": "M月d日 EEEE",

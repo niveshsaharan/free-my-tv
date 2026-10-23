@@ -156,6 +156,7 @@
  "animations|Faster": "तेज़",
  "animations|Normal": "सामान्य",
  "animations|Off": "बंद",
+ "based on {app}": "{app} पर आधारित",
  "debugging is off on the TV (port 5555 closed)": "टीवी पर डीबगिंग बंद है (पोर्ट 5555 बंद)",
  "debugging permission wasn't accepted on the TV": "टीवी पर डीबगिंग की अनुमति स्वीकार नहीं हुई",
  "format|EEEE, MMMM d": "EEEE, d MMMM",

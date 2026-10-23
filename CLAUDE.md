@@ -203,6 +203,13 @@ free_my_tv_animations` shows three values, they are the TV's `window_animation_s
   are. Run `python3 tools/translate.py --check` to validate all catalogues without writing files.
   No right-to-left languages yet (the layout isn't mirrored); CJK and Devanagari use the system font.
   Comments in English, short, only where the why isn't obvious.
+- Your brand (`brand/`, optional): `build.sh` turns `brand/brand.properties` into the generated `BrandConfig` (read
+  through `Brand`), overlays the name (`@string/app_name`, used by every label in the manifest), the icon and the banner,
+  and puts `brand/logo.png` in the assets; `tools/make_art.py --brand` draws the icon and banner (and a logo when there
+  is none). In code the app's name is `Brand.NAME`, never the literal. `Ui.applyLanguage` swaps "Free My TV" for it in
+  the loaded catalogue (and in the English texts that hold it), so keep the name whole in translations ("Free My
+  TV-modus" works, "Free-My-TV-Modus" doesn't). The accent goes only where it stands out (`Brand.accent`, 3:1). The
+  package, the records on the TV (`free_my_tv_*`), the keystore and the log tag never change.
 - Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
   What the person changes on the TV (`Prefs`: Home Settings, Shelf, Remote Buttons) wins over those first values.
 - The remote's app buttons (`RemoteKeys`, `RemoteKeyService`) use each brand's key codes: they run only on TCL,

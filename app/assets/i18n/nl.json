@@ -156,6 +156,7 @@
  "animations|Faster": "Sneller",
  "animations|Normal": "Normaal",
  "animations|Off": "Uit",
+ "based on {app}": "gebaseerd op {app}",
  "debugging is off on the TV (port 5555 closed)": "foutopsporing staat uit op de tv (poort 5555 dicht)",
  "debugging permission wasn't accepted on the TV": "toestemming voor foutopsporing is niet geaccepteerd op de tv",
  "format|EEEE, MMMM d": "EEEE d MMMM",
