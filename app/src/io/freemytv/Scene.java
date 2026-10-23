@@ -123,6 +123,11 @@ final class Scene {
         return liquid != null;
     }
 
+    /** Whether the background moves (the AGSL aurora); otherwise it's a still gradient. */
+    boolean moves() {
+        return aurora != null;
+    }
+
     /** The liquid glass now shows this photo (Backdrop.GW × GH, slightly blurred). */
     void setGlassImage(int[] pixels) {
         setGlassImages(pixels, null);

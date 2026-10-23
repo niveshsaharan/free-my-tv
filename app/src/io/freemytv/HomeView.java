@@ -2,6 +2,7 @@ package io.freemytv;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
@@ -41,7 +42,6 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Consumer;
 
 /**
  * The home screen, styled after the Apple TV app with the macOS 27 glass:
@@ -148,7 +148,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private List<HomeApps.Item> shelf = new ArrayList<>();
     private Spring[] tileFocus = new Spring[0];
     private RectF[] tileRects = new RectF[0];
-    private final Map<String, Bitmap> crispLogos = new HashMap<>();   // logos already sized for the focused tile
+    // Logos already sized for the tiles, by source logo: {focused size, resting size} (emptied when the tiles resize).
+    private final Map<Bitmap, Bitmap[]> crispLogos = new java.util.IdentityHashMap<>();
     /** Each app's tile like its Apple TV icon: brand colors (top, bottom) and logo (0 = as is, 1 = white, 2 = dark). */
     private static final Map<String, int[]> TILE_STYLE = new HashMap<>();
     static {
@@ -201,6 +202,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int drawerInputs;          // how many leading items are inputs (the rest are shortcuts)
     private Spring[] drawerFocus = new Spring[0];
     private RectF[] drawerRects = new RectF[0];
+    private String[] drawerFit = new String[0];     // the names as drawn (fitDrawerLabels)
+    private float[] drawerSize = new float[0];
     private final RectF weatherCard = new RectF(), quotesCard = new RectF();
     private final Spring drawer = new Spring(0.46f, 0.92f, 0);
     private boolean drawerOpen;
@@ -265,8 +268,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private float tileShaderH, cardSheenH;
     private LinearGradient[] lightSheens = new LinearGradient[0], lightRims = new LinearGradient[0];
     private float[] lightShaderW = new float[0];
-    private android.graphics.ColorFilter veilFilter;
-    private float veilAmount = -1;
+    private final android.graphics.ColorFilter[] veils = new android.graphics.ColorFilter[65];
     private int veilColor;
     private HomeData.Weather textWeather;
     private long textPricesAt = -1, textMinute = -1;
@@ -438,6 +440,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void destroy() {
         pause();
         click.release();
+    }
+
+    /**
+     * The system is short of memory while the home screen is out of sight (a streaming app is on): what is quick to
+     * make again goes, so the home process stays small and isn't the one killed. It all comes back on return.
+     */
+    void trim(int level) {
+        if (level < ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) return;
+        recs.trim();        // the other tabs' photos (Explore's stay: Home opens there)
+        if (level < ComponentCallbacks2.TRIM_MEMORY_MODERATE) return;
+        HomeApps.releaseTiles();
+        for (HomeApps.Item it : others) it.tile = null;
+        appsStale = true;   // All Apps makes its cards again on the next reload
+        gridDirty = true;
     }
 
     /** Starting state (Home pressed while the home screen is showing): first app focused, drawer and sheet closed. */
@@ -1011,19 +1027,26 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         drawLightSky(c);
     }
 
-    /** Blends a color on top (the drawer's veil) as part of drawing the image, without another layer. */
+    /**
+     * Blends a color on top (the drawer's veil) as part of drawing the image, without another layer. In steps of 1/64,
+     * each made once per color: the drawer's animation doesn't make a new filter on every frame.
+     */
     private android.graphics.ColorFilter veil(float amount, int color) {
         if (amount <= 0.002f) return null;
-        amount = Math.round(amount * 255) / 255f;
-        if (amount == veilAmount && color == veilColor) return veilFilter;
-        veilAmount = amount;
-        veilColor = color;
-        float keep = 1 - amount;
-        return veilFilter = new android.graphics.ColorMatrixColorFilter(new float[] {
-            keep, 0, 0, 0, ((color >> 16) & 255) * amount,
-            0, keep, 0, 0, ((color >> 8) & 255) * amount,
-            0, 0, keep, 0, (color & 255) * amount,
-            0, 0, 0, 1, 0});
+        int step = Math.max(1, Math.min(64, Math.round(amount * 64)));
+        if (color != veilColor) {
+            java.util.Arrays.fill(veils, null);
+            veilColor = color;
+        }
+        if (veils[step] == null) {
+            float a = step / 64f, keep = 1 - a;
+            veils[step] = new android.graphics.ColorMatrixColorFilter(new float[] {
+                keep, 0, 0, 0, ((color >> 16) & 255) * a,
+                0, keep, 0, 0, ((color >> 8) & 255) * a,
+                0, 0, keep, 0, (color & 255) * a,
+                0, 0, 0, 1, 0});
+        }
+        return veils[step];
     }
 
     private void drawImage(Canvas c, Bitmap image, float alpha) {
@@ -1353,16 +1376,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Bitmap crispLogo(HomeApps.Item it, boolean dark, boolean rest) {
         Bitmap src = dark ? it.logoDark : it.logo;
         if (tileRects.length == 0) return src;
-        String key = it.key + "@" + System.identityHashCode(src) + "@" + Math.round(tileRects[0].width()) + (rest ? "@rest" : "");
-        Bitmap cached = crispLogos.get(key);
-        if (cached != null) return cached;
+        Bitmap[] sized = crispLogos.get(src);
+        if (sized == null) crispLogos.put(src, sized = new Bitmap[2]);
+        if (sized[rest ? 1 : 0] != null) return sized[rest ? 1 : 0];
         float bw = tileRects[0].width() * (1 + FOCUS_GROW), bh = tileRects[0].height() * (1 + FOCUS_GROW);
         float lw = src.getWidth(), lh = src.getHeight();
         float scale = (float) Math.sqrt(bw * bh * 0.085f / (lw * lh * Math.max(0.08f, it.logoInk))) * it.logoScale;
         scale = Math.min(scale, Math.min(bw * 0.76f / lw, bh * 0.58f / lh));
         if (rest) scale /= 1 + FOCUS_GROW;
         Bitmap out = downscale(src, Math.round(lw * scale), Math.round(lh * scale));
-        crispLogos.put(key, out);
+        sized[rest ? 1 : 0] = out;
         return out;
     }
 
@@ -1429,6 +1452,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // A card that is off gives its room to the other one.
         weatherCard.set(left, cardsTop, qt ? split - 16 * k : right, cardsTop + CARDS_H * k);
         quotesCard.set(wx ? split + 16 * k : left, cardsTop, right, cardsTop + CARDS_H * k);
+        drawerFit = new String[0];      // fitted again at the next draw
         drawerDirty = true;
     }
 
@@ -1517,22 +1541,42 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean off = it.kind == HomeApps.INPUT && !it.connected;
         int ink = blend(tone(off ? 0xFF8E8E93 : L_INK, off ? 0x6BFFFFFF : 0xF2FFFFFF), INK, f);
         Symbols.draw(getContext(), c, it.symbol, cx, cell.top + cell.height() * 0.4f, 34 * k * s, ink);
+        if (drawerFit.length != drawerItems.size()) fitDrawerLabels();
         drawerLabel.setColor(ink);
-        drawerLabel.setTextSize(23 * k * s);
-        float room = cell.width() - 16 * k, wide = drawerLabel.measureText(it.label);
-        // A long name ("Home Settings", an input you renamed) shrinks a little before it gets cut.
-        if (wide > room) drawerLabel.setTextSize(Math.max(18 * k * s, 23 * k * s * room / wide));
-        fitPaint.set(drawerLabel);
-        String label = TextUtils.ellipsize(it.label, fitPaint, room, TextUtils.TruncateAt.END).toString();
-        c.drawText(label, cx, cell.top + cell.height() * 0.8f, drawerLabel);
+        drawerLabel.setTextSize(drawerSize[i] * s);
+        c.drawText(drawerFit[i], cx, cell.top + cell.height() * 0.8f, drawerLabel);
+        drawerLabel.setTextSize(23 * k);
+    }
+
+    /** The drawer's names at rest: a long one ("Home Settings", an input you renamed) shrinks a little, then is cut. */
+    private void fitDrawerLabels() {
+        int n = drawerItems.size();
+        drawerFit = new String[n];
+        drawerSize = new float[n];
+        for (int i = 0; i < n; i++) {
+            String label = drawerItems.get(i).label;
+            float room = drawerRects[i].width() - 16 * k, size = 23 * k;
+            drawerLabel.setTextSize(size);
+            float wide = drawerLabel.measureText(label);
+            if (wide > room) size = Math.max(18 * k, size * room / wide);
+            fitPaint.set(drawerLabel);
+            fitPaint.setTextSize(size);
+            drawerFit[i] = TextUtils.ellipsize(label, fitPaint, room, TextUtils.TruncateAt.END).toString();
+            drawerSize[i] = size;
+        }
         drawerLabel.setTextSize(23 * k);
     }
 
     /** Weather for your location: now (large), the next 6 hours, and sunrise and sunset. */
     private void drawWeatherCard(Canvas c, RectF r) {
         drawerCard(c, r);
-        if (Ui.LEGACY) weatherSnapshot.draw(c, r, drawerCardsKey(), cc -> drawWeather(cc, r));
-        else drawWeather(c, r);
+        if (!Ui.LEGACY) {
+            drawWeather(c, r);
+            return;
+        }
+        Canvas cc = weatherSnapshot.redraw(r, drawerCardsKey());
+        if (cc != null) drawWeather(cc, r);
+        weatherSnapshot.draw(c);
     }
 
     private void drawWeather(Canvas c, RectF r) {
@@ -1606,17 +1650,26 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Prices in the configured currency with the 24 h change (green/red, like Apple's Stocks app). */
     private void drawQuotesCard(Canvas c, RectF r) {
         drawerCard(c, r);
-        if (Ui.LEGACY) quotesSnapshot.draw(c, r, drawerCardsKey(), cc -> drawPrices(cc, r));
-        else drawPrices(c, r);
+        if (Ui.LEGACY) {
+            Canvas cc = quotesSnapshot.redraw(r, drawerCardsKey());
+            if (cc != null) drawPrices(cc, r);
+            quotesSnapshot.draw(c);
+            return;
+        }
+        drawPrices(c, r);
     }
 
     /**
      * What the drawer cards show depends on: the data, the settings, the language, day or night, and the minute (the
      * sunrise and sunset, "12 min ago").
      */
-    private String drawerCardsKey() {
-        return data.weatherAt + "|" + data.pricesAt + "|" + Prefs.version + "|" + Ui.language + "|"
-                + Float.floatToIntBits(dark()) + "|" + System.currentTimeMillis() / 60_000;
+    private long drawerCardsKey() {
+        long key = data.weatherAt;
+        key = key * 31 + data.pricesAt;
+        key = key * 31 + Prefs.version;
+        key = key * 31 + Ui.generation;
+        key = key * 31 + Float.floatToIntBits(dark());
+        return key * 31 + System.currentTimeMillis() / 60_000;
     }
 
     /**
@@ -1625,22 +1678,28 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private static final class Snapshot {
         private Bitmap bitmap;
-        private String key = "";
+        private long key;
+        private int left, top;
 
-        void draw(Canvas c, RectF r, String key, Consumer<Canvas> content) {
-            int left = Math.round(r.left), top = Math.round(r.top);
+        /** A canvas to draw the content on (in screen coordinates) when it changed; null when the kept one is current. */
+        Canvas redraw(RectF r, long key) {
+            left = Math.round(r.left);
+            top = Math.round(r.top);
             int w = Math.max(1, Math.round(r.right) - left), h = Math.max(1, Math.round(r.bottom) - top);
             if (bitmap == null || bitmap.getWidth() != w || bitmap.getHeight() != h) {
                 bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-                this.key = "";
-            }
-            if (!key.equals(this.key)) {
+            } else if (key == this.key) {
+                return null;
+            } else {
                 bitmap.eraseColor(0);
-                Canvas cc = new Canvas(bitmap);
-                cc.translate(-left, -top);
-                content.accept(cc);
-                this.key = key;
             }
+            this.key = key;
+            Canvas cc = new Canvas(bitmap);
+            cc.translate(-left, -top);
+            return cc;
+        }
+
+        void draw(Canvas c) {
             c.drawBitmap(bitmap, left, top, null);
         }
     }
@@ -2803,12 +2862,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.restore();
         }
         if (p == null) return;
-        fitPaint.set(lCardTitle);
-        c.drawText(TextUtils.ellipsize(p.title, fitPaint, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 46 * k, lCardTitle);
+        c.drawText(fit(i, p.title, lCardTitle, bw), base.left, base.bottom + 46 * k, lCardTitle);
         if (i == 0 && p.meta != null && !p.meta.isEmpty()) {
-            fitPaint.set(lCardMeta);
-            c.drawText(TextUtils.ellipsize(p.meta, fitPaint, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 80 * k, lCardMeta);
+            c.drawText(fit(3, p.meta, lCardMeta, bw), base.left, base.bottom + 80 * k, lCardMeta);
         }
+    }
+
+    // The cards' texts cut to their width, kept per slot (titles 0 to 2, the large card's line 3): the cards are drawn
+    // on every frame of their focus animation, and measuring and cutting text there costs time and garbage.
+    private final String[] fitFor = new String[4], fitText = new String[4];
+    private final float[] fitWidth = new float[4];
+    private final Paint[] fitWith = new Paint[4];
+
+    private String fit(int slot, String text, Paint paint, float width) {
+        if (text != fitFor[slot] || width != fitWidth[slot] || paint != fitWith[slot]) {
+            fitPaint.set(paint);
+            fitText[slot] = TextUtils.ellipsize(text, fitPaint, width, TextUtils.TruncateAt.END).toString();
+            fitFor[slot] = text;
+            fitWidth[slot] = width;
+            fitWith[slot] = paint;
+        }
+        return fitText[slot];
     }
 
     /**

@@ -6,8 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
-
-import java.util.HashMap;
+import android.util.LongSparseArray;
 
 /**
  * Blurred rounded-rectangle shadows for older GPUs. A BlurMaskFilter is rasterized on the CPU and uploaded again every
@@ -17,7 +16,7 @@ import java.util.HashMap;
  * Android 12+ keeps drawing the real BlurMaskFilter.
  */
 final class Shadows {
-    private final HashMap<Long, Bitmap> cache = new HashMap<>();
+    private final LongSparseArray<Bitmap> cache = new LongSparseArray<>();   // a long key, no boxing on every frame
     private final Paint tint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Rect src = new Rect();
     private final RectF dst = new RectF();

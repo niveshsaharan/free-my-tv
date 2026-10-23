@@ -108,6 +108,8 @@ final class Recs {
     private final Context context;
     private final SharedPreferences cache;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    /** The cards' photos have their own thread: they don't wait behind a list fetch (dozens of requests). */
+    private final ExecutorService decoder = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
     private final Map<String, Backdrop> images = new LinkedHashMap<>();   // this hour's, built and ready to draw
@@ -224,9 +226,9 @@ final class Recs {
             if (b != null) return b;
             if (!pending.add(key)) return null;
         }
-        io.execute(() -> {
+        decoder.execute(() -> {
             try {
-                loadImage(p);
+                loadImage(p, key);
             } finally {
                 synchronized (images) { pending.remove(key); }
             }
@@ -239,7 +241,11 @@ final class Recs {
     }
 
     private File imageFile(Pick p) {
-        return new File(new File(context.getCacheDir(), "recs"), p.backdrop.replace("/", ""));
+        return imageFile(p.backdrop);
+    }
+
+    private File imageFile(String backdrop) {
+        return new File(new File(context.getCacheDir(), "recs"), backdrop.replace("/", ""));
     }
 
     /** With a key: fetches the list if stale or the time of day (morning/afternoon/night) changed; then the details. */
@@ -268,7 +274,7 @@ final class Recs {
                     tried++;
                     try {
                         if (!pick.detailed) fetchDetails(pick);
-                        if (pick.pkg != null) download(pick);
+                        if (pick.pkg != null) download(pick.backdrop);
                     } catch (Exception e) {
                         failures++;
                         last = e.getMessage() == null ? e.toString() : e.getMessage();
@@ -342,7 +348,7 @@ final class Recs {
                 for (Pick p : todo) {
                     try {
                         if (!p.detailed) fetchDetails(p);
-                        if (p.pkg != null) download(p);
+                        if (p.pkg != null) download(p.backdrop);
                     } catch (Exception e) {
                         failures++;
                         last = e.getMessage() == null ? e.toString() : e.getMessage();
@@ -695,13 +701,14 @@ final class Recs {
 
     // MARK: - Images (TMDB originals on disk, up to 24 so the whole list fits; this hour's kept ready in memory)
 
-    private void download(Pick p) throws IOException {
-        File f = imageFile(p);
+    private void download(String backdrop) throws IOException {
+        File f = imageFile(backdrop);
         if (f.exists()) return;
         //noinspection ResultOfMethodCallIgnored
         f.getParentFile().mkdirs();
-        File part = new File(f.getPath() + ".part");
-        HttpURLConnection c = (HttpURLConnection) new URL(IMAGES + p.backdrop).openConnection();
+        // Two threads can fetch the same photo (the list's and the cards'): each writes its own part.
+        File part = new File(f.getPath() + "." + Thread.currentThread().getId() + ".part");
+        HttpURLConnection c = (HttpURLConnection) new URL(IMAGES + backdrop).openConnection();
         c.setConnectTimeout(8000);
         c.setReadTimeout(20000);
         try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {
@@ -719,14 +726,17 @@ final class Recs {
         prune(f.getParentFile());
     }
 
-    /** Reads the photo (≥ the UI's width) and builds the backdrop (Backdrop: cards plus frosted and glass versions). */
-    private void loadImage(Pick p) {
+    /**
+     * Reads the photo (≥ the UI's width) and builds the backdrop (Backdrop: cards plus frosted and glass versions).
+     * `key` is the photo asked for (the details, on the other thread, may swap the pick's).
+     */
+    private void loadImage(Pick p, String key) {
         synchronized (images) {
-            if (images.containsKey(p.backdrop)) return;
+            if (images.containsKey(key)) return;
         }
-        File f = imageFile(p);
+        File f = imageFile(key);
         try {
-            download(p);
+            download(key);
             BitmapFactory.Options bounds = new BitmapFactory.Options();
             bounds.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(f.getPath(), bounds);
@@ -740,7 +750,7 @@ final class Recs {
             Backdrop backdrop = Backdrop.make(b, forLight);
             if (forLight != light) return;   // the design changed midway: this one is stale
             synchronized (images) {
-                images.put(p.backdrop, backdrop);
+                images.put(key, backdrop);
                 while (images.size() > (forLight ? 10 : 4)) images.remove(images.keySet().iterator().next());
             }
             notifyListeners();

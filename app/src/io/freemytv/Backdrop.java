@@ -68,26 +68,32 @@ final class Backdrop {
     }
 
     static Backdrop make(Bitmap src, boolean forLight) {
-        Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(out);
-        Paint photo = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
         float scale = Math.max((float) W / src.getWidth(), (float) H / src.getHeight());
-        float sw = src.getWidth() * scale, sh = src.getHeight() * scale;
-        c.drawBitmap(src, null, new RectF((W - sw) / 2, (H - sh) / 2, (W + sw) / 2, (H + sh) / 2), photo);
-        src.recycle();
         if (forLight) {
-            // Light design: everything comes from the photo without scrims.
-            Bitmap wide = card(out, WIDE_W, WIDE_H), tall = card(out, TALL_W, TALL_H);
-            int[] frost = reduce(out, FW, FH, 3, 3);
+            // Light design: everything comes from the photo without scrims, cut straight from the part of it a W × H
+            // screen would show (no full-screen image drawn first: 8 MB and a software draw less per photo).
+            float vw = W / scale, vh = H / scale, vx = (src.getWidth() - vw) / 2, vy = (src.getHeight() - vh) / 2;
+            Bitmap wide = card(src, vx, vy, vw, vh, WIDE_W, WIDE_H), tall = card(src, vx, vy, vw, vh, TALL_W, TALL_H);
+            int x = Math.max(0, Math.round(vx)), y = Math.max(0, Math.round(vy));
+            Bitmap view = Bitmap.createBitmap(src, x, y, Math.min(src.getWidth() - x, Math.round(vw)),
+                    Math.min(src.getHeight() - y, Math.round(vh)));
+            int[] frost = reduce(view, FW, FH, 3, 3);
             int[] light = whiten(frost.clone(), 0.82f);
-            int[] glass = GLASS ? reduce(out, GW, GH, 2, 2) : null;
+            int[] glass = GLASS ? reduce(view, GW, GH, 2, 2) : null;
             int[] lightGlass = glass == null ? null : whiten(glass.clone(), 0.74f);
             int[] night = darken(frost.clone(), 0.76f);
             int[] nightGlass = glass == null ? null : darken(glass, 0.56f);
-            out.recycle();
+            if (view != src) view.recycle();
+            src.recycle();
             return new Backdrop(null, frost, null, wide, tall, light, lightGlass, night, nightGlass);
         }
 
+        Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(out);
+        Paint photo = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        float sw = src.getWidth() * scale, sh = src.getHeight() * scale;
+        c.drawBitmap(src, null, new RectF((W - sw) / 2, (H - sh) / 2, (W + sw) / 2, (H + sh) / 2), photo);
+        src.recycle();
         float boost = Math.max(0, Math.min(0.3f, (luminance(out, 0, 0.22f, 0.5f, 0.62f) - 0.22f) * 1.1f));
         Paint scrim = new Paint(Paint.DITHER_FLAG);
         scrim.setShader(new LinearGradient(0, 0, W * 0.68f, 0,
@@ -130,7 +136,11 @@ final class Backdrop {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new java.io.IOException("unreadable image");
         android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
         opts.inSampleSize = 1;
-        while (bounds.outWidth / (opts.inSampleSize * 2) >= w && bounds.outHeight / (opts.inSampleSize * 2) >= h) opts.inSampleSize *= 2;
+        opts.inMutable = true;      // the scrims are painted onto it
+        // Halved while it still covers the UI (W × H), not the 10% larger target: a 3840 original is decoded at 1920
+        // (8 MB, not 33), at most 10% short at the end of the zoom, as a 1920 original is.
+        int minW = Math.min(w, W), minH = Math.min(h, H);
+        while (bounds.outWidth / (opts.inSampleSize * 2) >= minW && bounds.outHeight / (opts.inSampleSize * 2) >= minH) opts.inSampleSize *= 2;
         Bitmap src = android.graphics.BitmapFactory.decodeFile(f.getPath(), opts);
         if (src == null) throw new java.io.IOException("unreadable image");
         float ratio = (float) w / h;
@@ -159,20 +169,29 @@ final class Backdrop {
         return new Bitmap[] {out, frost};
     }
 
-    /** The center of the photo at the card's aspect ratio, filtered down (halving while possible) to the exact size. */
-    private static Bitmap card(Bitmap full, int w, int h) {
+    /**
+     * The center of the region (rx, ry, rw, rh of src) at the card's aspect ratio, filtered down to the exact size: one
+     * step to at most half (no aliasing), halving while it's still twice too big, then the last step.
+     */
+    private static Bitmap card(Bitmap src, float rx, float ry, float rw, float rh, int w, int h) {
         float ratio = (float) w / h;
-        int cw = Math.min(full.getWidth(), Math.round(full.getHeight() * ratio));
-        int ch = Math.min(full.getHeight(), Math.round(cw / ratio));
-        Bitmap b = Bitmap.createBitmap(full, (full.getWidth() - cw) / 2, (full.getHeight() - ch) / 2, cw, ch);
+        float cw = Math.min(rw, rh * ratio), ch = Math.min(rh, cw / ratio);
+        int x = Math.max(0, Math.round(rx + (rw - cw) / 2)), y = Math.max(0, Math.round(ry + (rh - ch) / 2));
+        int iw = Math.max(1, Math.min(src.getWidth() - x, Math.round(cw)));
+        int ih = Math.max(1, Math.min(src.getHeight() - y, Math.round(ch)));
+        android.graphics.Matrix m = new android.graphics.Matrix();
+        float s = Math.max(0.5f, (float) w / iw);
+        m.setScale(s, s);
+        Bitmap b = Bitmap.createBitmap(src, x, y, iw, ih, m, true);
         while (b.getWidth() / 2 >= w) {
             Bitmap half = Bitmap.createScaledBitmap(b, b.getWidth() / 2, b.getHeight() / 2, true);
-            if (b != full) b.recycle();
+            if (b != src) b.recycle();
             b = half;
         }
-        Bitmap out = Bitmap.createScaledBitmap(b, w, h, true);
-        if (b != full && b != out) b.recycle();
-        return gpu(out);
+        Bitmap out = b.getWidth() == w && b.getHeight() == h ? b : Bitmap.createScaledBitmap(b, w, h, true);
+        if (b != src && b != out) b.recycle();
+        // gpu() recycles what it copies: never the photo itself, the other card is cut from it too.
+        return gpu(out == src ? src.copy(Bitmap.Config.ARGB_8888, false) : out);
     }
 
     /** Copies it to GPU memory (cheap to draw; the process doesn't keep the pixels). */

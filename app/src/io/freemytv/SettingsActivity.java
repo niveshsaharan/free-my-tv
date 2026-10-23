@@ -146,6 +146,7 @@ public class SettingsActivity extends Activity {
         private float k = 1;
         private Paint title, subtitle, version, rowLabel, rowValue, rowSub, header, cellLabel, cellValue, warn, spinner, white, shadow;
         private TextPaint notice;
+        private final String versionLine;   // asked once: PackageManager is a round trip to the system
 
         private final Runnable poll = new Runnable() {
             @Override public void run() {
@@ -175,6 +176,7 @@ public class SettingsActivity extends Activity {
             Shaders.sky(scene.palette, System.currentTimeMillis(), wx.sunrise, wx.sunset);
             scene.setMotion(0.5f, 0.2f);
             scene.applyPalette();
+            versionLine = versionName(a);
             setFocusable(true);
             setContentDescription("Free My TV");
             // TalkBack: one item per row, id = row + 1.
@@ -280,7 +282,8 @@ public class SettingsActivity extends Activity {
             if (!running) return;
             boolean moving = busy();
             for (Spring s : pop) moving |= !s.settled();
-            if (moving || SystemClock.uptimeMillis() - lastSky >= 100) invalidate();
+            // A still background (no aurora before Android 13) needs no redraw of its own: only what changes.
+            if (moving || (scene.moves() && SystemClock.uptimeMillis() - lastSky >= 100)) invalidate();
             Choreographer.getInstance().postFrameCallback(this);
         }
 
@@ -363,7 +366,7 @@ public class SettingsActivity extends Activity {
             Symbols.draw(getContext(), c, "sparkles", cx, 400 * k, 150 * k, 0xEBFFFFFF);
             c.drawText("Free My TV", cx, 612 * k, title);
             c.drawText(Ui.tr("Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
-            c.drawText(versionName(getContext()), cx, 704 * k, version);
+            c.drawText(versionLine, cx, 704 * k, version);
 
             if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else if (screen == SHELF_EDIT) drawShelfEditor(c); else drawList(c);
         }

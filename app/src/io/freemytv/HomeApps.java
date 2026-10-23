@@ -810,6 +810,11 @@ final class HomeApps {
 
     // MARK: - Cards
 
+    /** Lets the All Apps cards go (keyed by package, so with a dot); the next All Apps list makes them again. */
+    static synchronized void releaseTiles() {
+        TILES.keySet().removeIf(k -> k.contains("."));
+    }
+
     private static synchronized Bitmap appTile(Context c, String key, String pkg, int brand) {
         String cacheKey = key != null ? key : pkg;
         if (TILES.containsKey(cacheKey)) return TILES.get(cacheKey);
