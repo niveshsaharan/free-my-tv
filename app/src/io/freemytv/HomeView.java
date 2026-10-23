@@ -96,6 +96,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
     private static final float L_DATE_BASE = 330, L_CLOCK_BASE = 540, L_WEATHER_BASE = 626, L_QUOTES_BASE = 694;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
+    // Your brand's accent (Brand): the selected tab by day and by night, and what's focused on white.
+    private static final int TAB_DAY = Brand.accent(L_INK, 0xFFE2E2E7), TAB_NIGHT = Brand.accent(WHITE, 0xFF1C1C1E),
+            FOCUS_INK = Brand.accent(L_INK, WHITE);
     private static String[] tabs;
     private static int tabsGeneration = -1;
     private static final String[] TAB_KIND = {null, "movie", "tv"};
@@ -142,6 +145,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final RectF[] cardRects = new RectF[3];
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
     private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip, lDate, lClock, lWeather, lClockQuote;
+    private Bitmap homeLogo;        // your brand's logo, by the round buttons (brand/ with home_logo)
+    private final Paint logoPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private Shader lightGradient;
 
     // Shelf
@@ -373,7 +378,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             v.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);   // TalkBack reads the items (Spoken)
             addView(v);
         }
-        setContentDescription("Free My TV");
+        setContentDescription(Brand.NAME);
         drawerLayer.setVisibility(INVISIBLE);
         for (int i = 0; i < 6; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
@@ -564,6 +569,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         screen.set(0, 0, w, h);
         scene.setSize(w, h);
         makePaints();
+        homeLogo = BrandConfig.HOME_LOGO ? Brand.logoMask(getContext(), Math.round(34 * k)) : null;
         gridLabels = null;
         clockMinute = -1;
         updateClock();
@@ -969,7 +975,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void applyTone() {
         lTitle.setColor(tone(L_INK, WHITE));
         lTab.setColor(tone(L_DIM, 0xFF8E8E93));
-        lTabOn.setColor(tone(L_INK, WHITE));
+        lTabOn.setColor(tone(TAB_DAY, TAB_NIGHT));
         lCardTitle.setColor(tone(L_INK, WHITE));
         lCardMeta.setColor(tone(L_DIM, 0xFF98989D));
         lQuote.setColor(tone(L_FAINT, 0xB8FFFFFF));
@@ -1550,7 +1556,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         boolean off = it.kind == HomeApps.INPUT && !it.connected;
         int ink = blend(tone(off ? 0xFF8E8E93 : L_INK, off ? 0x6BFFFFFF : 0xF2FFFFFF), INK, f);
-        Symbols.draw(getContext(), c, it.symbol, cx, cell.top + cell.height() * 0.4f, 34 * k * s, ink);
+        int mark = off ? ink : blend(tone(L_INK, 0xF2FFFFFF), FOCUS_INK, f);
+        Symbols.draw(getContext(), c, it.symbol, cx, cell.top + cell.height() * 0.4f, 34 * k * s, mark);
         if (drawerFit.length != drawerItems.size()) fitDrawerLabels();
         drawerLabel.setColor(ink);
         drawerLabel.setTextSize(drawerSize[i] * s);
@@ -2780,7 +2787,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawRoundRect(cell, rr, rr, fill);
             }
             Paint p = i == tab ? lTabOn : lTab;
-            if (i == tab) lTabOn.setColor(blend(tone(L_INK, WHITE), L_INK, focus));   // always dark on the white pill
+            if (i == tab) lTabOn.setColor(blend(tone(TAB_DAY, TAB_NIGHT), L_INK, focus));   // always dark on the white pill
             c.drawText(tabs()[i], r.centerX() - p.measureText(tabs()[i]) / 2, r.centerY() + Ui.halfCap(p), p);
         }
         int top = -1;
@@ -2918,7 +2925,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawCircle(cell.centerX(), cell.centerY(), rad, fill);
             }
             Symbols.draw(getContext(), c, lightButtons.get(i).symbol, cell.centerX(), cell.centerY(), 27 * k * s,
-                    blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
+                    blend(tone(L_INK, 0xEBFFFFFF), FOCUS_INK, f));
             if (f > 0.01f) {
                 String label = lightButtons.get(i).label;
                 float half = lTip.measureText(label) / 2;
@@ -2926,6 +2933,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 lTip.setAlpha(Math.round(255 * f));
                 c.drawText(label, x, r.bottom + (40 + 4 * f) * k, lTip);
             }
+        }
+        if (homeLogo != null) {
+            // Your brand, left of the buttons, in the text's own tone (it follows day and night with them).
+            RectF first = topRects[3];
+            logoPaint.setColor(tone(Ui.alpha(L_INK, 0.6f), 0x99FFFFFF));
+            c.drawBitmap(homeLogo, first.left - 26 * k - homeLogo.getWidth(), first.centerY() - homeLogo.getHeight() / 2f, logoPaint);
         }
     }
 

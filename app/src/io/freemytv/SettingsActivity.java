@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -125,6 +126,10 @@ public class SettingsActivity extends Activity {
         private static final int PICK_VISIBLE = 9;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 74, ROW_GAP = 8, CHOICE_H = 104;
         private static final int AMBER = 0xFFFFC266, INK = 0xFF1C1C1E;
+        // Your brand's accent (Brand; 0 without one): the logo, "On" on the dark background and on the white of a
+        // focused row, and the bar at the start of the focused row.
+        private static final int PANEL_LOGO = Brand.accent(0xEBFFFFFF, INK), ON_DARK = Brand.accent(0, INK),
+                ON_LIGHT = Brand.accent(0, 0xFFFFFFFF);
 
         private final SettingsActivity activity;
         private final Scene scene = new Scene();
@@ -159,6 +164,8 @@ public class SettingsActivity extends Activity {
         private final List<JSONObject> speedApps = new ArrayList<>();
         private long speedListStamp = Long.MIN_VALUE, scanAskedAt, scanAskedUp;
         private Paint speedHeading, speedMb;
+        private Bitmap panelLogo;       // your brand's logo, in place of the sparkles (brand/)
+        private final Paint logoPaint = new Paint(Paint.FILTER_BITMAP_FLAG), accentBar = new Paint(Paint.ANTI_ALIAS_FLAG);
         private TextPaint speedHint, speedFit;
         // Hints under the Speed lists, wrapped (translations run longer): made again only when their text changes.
         private final StaticLayout[] hints = new StaticLayout[2];
@@ -196,7 +203,7 @@ public class SettingsActivity extends Activity {
             versionLine = versionName(a);
             Lighter.on();
             setFocusable(true);
-            setContentDescription("Free My TV");
+            setContentDescription(Brand.NAME);
             // TalkBack: one item per row, id = row + 1.
             spoken = new Spoken(this, new Spoken.Source() {
                 @Override public void items(List<Integer> out) { for (int i = 1; i <= rowCount(); i++) out.add(i); }
@@ -226,7 +233,7 @@ public class SettingsActivity extends Activity {
                     if (row == 0) {
                         String busyText = busyText();
                         String value = busy() ? (busyText.isEmpty() ? Ui.tr("Starting…") : busyText)
-                                : freeActive() ? "Free My TV" : Ui.tr("Original");
+                                : freeActive() ? Brand.NAME : Ui.tr("Original");
                         return Ui.trf("Home Screen, {mode}", "mode", value);
                     }
                     String[] names = {Ui.tr("Screensaver, preview"), Ui.tr("Home Settings"),
@@ -245,7 +252,7 @@ public class SettingsActivity extends Activity {
                             + Ui.trf("{i} of {n}", "i", at + 1, "n", speedApps.size());
                 }
                 case HOME_CHOICE: {
-                    String name = row == 0 ? "Free My TV, " + Ui.tr("no ads, with the new screensaver")
+                    String name = row == 0 ? Brand.NAME + ", " + Ui.tr("no ads, with the new screensaver")
                             : "Original, " + Ui.tr("the TV's factory home screen");
                     boolean inUse = (row == 0) == freeActive();
                     return name + (inUse ? Ui.tr(". In use") : "") + ", " + Ui.trf("{i} of {n}", "i", row + 1, "n", 2);
@@ -321,6 +328,7 @@ public class SettingsActivity extends Activity {
             h = height;
             k = w / 1920f;
             scene.setSize(w, h);
+            panelLogo = Brand.logoMask(getContext(), Math.round(150 * k));
             title = Ui.text(Ui.displaySemibold, 50 * k, 0xFFFFFFFF);
             title.setTextAlign(Paint.Align.CENTER);
             subtitle = Ui.text(Ui.regular, 26 * k, 0x99FFFFFF);
@@ -400,9 +408,14 @@ public class SettingsActivity extends Activity {
 
             // On the left: big symbol, title, description.
             float cx = 500 * k;
-            Symbols.draw(getContext(), c, "sparkles", cx, 400 * k, 150 * k, 0xEBFFFFFF);
-            c.drawText("Free My TV", cx, 612 * k, title);
-            c.drawText(Ui.tr("Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
+            if (panelLogo != null) {
+                logoPaint.setColor(PANEL_LOGO);
+                c.drawBitmap(panelLogo, cx - panelLogo.getWidth() / 2f, 400 * k - panelLogo.getHeight() / 2f, logoPaint);
+            } else {
+                Symbols.draw(getContext(), c, "sparkles", cx, 400 * k, 150 * k, 0xEBFFFFFF);
+            }
+            c.drawText(Brand.NAME, cx, 612 * k, title);
+            c.drawText(Brand.tagline(), cx, 660 * k, subtitle);
             c.drawText(versionLine, cx, 704 * k, version);
 
             if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else if (screen == SHELF_EDIT) drawShelfEditor(c); else if (screen == SPEED) drawSpeed(c); else if (screen == SPEED_APPS) drawSpeedApps(c); else drawList(c);
@@ -411,7 +424,7 @@ public class SettingsActivity extends Activity {
         private void drawMain(Canvas c, float seconds) {
             boolean working = busy();
             String busyText = busyText();
-            String mode = freeActive() ? "Free My TV" : Ui.tr("Original");
+            String mode = freeActive() ? Brand.NAME : Ui.tr("Original");
             String[] labels = {Ui.tr("Home Screen"), Ui.tr("Screensaver"),
                     Ui.tr("Home Settings"), Ui.tr("Shelf"),
                     Ui.tr("Remote Buttons"), Ui.tr("Speed"), Ui.tr("TV Settings")};
@@ -503,6 +516,11 @@ public class SettingsActivity extends Activity {
                 white.setAlpha(Math.round(255 * f));
                 c.drawRoundRect(tmp, r, r, white);
                 rowRect.set(tmp);
+                if (ON_LIGHT != 0) {
+                    accentBar.setColor(Ui.alpha(ON_LIGHT, f));
+                    float bh = tmp.height() * 0.42f, bx = tmp.left + 12 * k;
+                    c.drawRoundRect(bx, tmp.centerY() - bh / 2, bx + 5 * k, tmp.centerY() + bh / 2, 2.5f * k, 2.5f * k, accentBar);
+                }
             }
             return f;
         }
@@ -512,7 +530,7 @@ public class SettingsActivity extends Activity {
             c.drawText(Ui.tr("COMPARISON"), x, y, header);
             cellValue.setColor(0x73FFFFFF);
             c.drawText(Ui.tr("Original"), colA, y, cellValue);
-            c.drawText("Free My TV", colB, y, cellValue);
+            c.drawText(Brand.NAME, colB, y, cellValue);
             cellValue.setColor(0xD9FFFFFF);
             JSONObject metrics = state.optJSONObject("metrics");
             JSONObject a = metrics == null ? null : metrics.optJSONObject(HomeMode.ORIGINAL);
@@ -547,7 +565,7 @@ public class SettingsActivity extends Activity {
         private void drawChoice(Canvas c) {
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
             c.drawText(Ui.tr("Home Screen"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
-            String[][] options = {{"Free My TV", Ui.tr("No ads, with the new screensaver")},
+            String[][] options = {{Brand.NAME, Ui.tr("No ads, with the new screensaver")},
                     {Ui.tr("Original"), Ui.tr("The TV's factory home screen")}};
             int current = freeActive() ? 0 : 1;
             for (int i = 0; i < 2; i++) {
@@ -593,10 +611,15 @@ public class SettingsActivity extends Activity {
 
         private static String versionName(Context c) {
             try {
-                return "Free My TV " + c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionName;
+                return Brand.version(c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionName);
             } catch (android.content.pm.PackageManager.NameNotFoundException e) {
-                return "Free My TV";
+                return Brand.version(null);
             }
+        }
+
+        /** "On" in your brand's accent, on the dark background and on the white of the focused row. */
+        private int valueInk(String value, int usual, float f) {
+            return ON_DARK != 0 && ON_LIGHT != 0 && value.equals(Ui.tr("On")) ? blend(ON_DARK, ON_LIGHT, f) : usual;
         }
 
         boolean onKey(KeyEvent e) {
@@ -1002,6 +1025,7 @@ public class SettingsActivity extends Activity {
                     Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(0x66FFFFFF, 0x991C1C1E, f));
                     right -= cw + 16 * k;
                 }
+                rowValue.setColor(valueInk(values[i], rowValue.getColor(), f));
                 c.drawText(values[i], right, base, rowValue);
             }
             // Room for two lines each, so nothing below moves with the focus.
@@ -1053,6 +1077,7 @@ public class SettingsActivity extends Activity {
                 rowValue.setColor(blend(locked ? 0x73FFFFFF : 0xB3FFFFFF, locked ? 0x731C1C1E : 0xB31C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel), right = rowRect.right - 30 * k;
                 String value = speedAppValue(app);
+                if (!locked) rowValue.setColor(valueInk(value, rowValue.getColor(), f));
                 c.drawText(value, right, base, rowValue);
                 float used = rowValue.measureText(value);
                 long mb = app.optLong("mb");
@@ -1217,6 +1242,7 @@ public class SettingsActivity extends Activity {
                 if (locked) rowLabel.setColor(blend(0x73FFFFFF, 0x731C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
+                if (!locked) rowValue.setColor(valueInk(values[i], rowValue.getColor(), f));
                 c.drawText(values[i], rowRect.right - 30 * k, base, rowValue);
             }
             Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);

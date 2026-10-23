@@ -109,7 +109,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private final float[] placeA = new float[3], placeB = new float[3];
     private final Paint photoPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
     private final Paint black = new Paint();
-    private final Paint shadowPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Paint shadowPaint = new Paint(Paint.FILTER_BITMAP_FLAG), markPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private Bitmap mark;            // your brand's logo, small, bottom right (brand/)
     private final Paint glassPaint = new Paint();
     private final Set<String> failed = new HashSet<>();     // Recs.key: a movie and a series can have the same ID
     private RuntimeShader glassShader;
@@ -227,6 +228,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         scene.setSize(w, h);
         content.setPosition(0, 0, w, h);
         chrome.setPosition(0, 0, w, h);
+        mark = Brand.logoMask(getContext(), Math.round(40 * k));
         // Without photos (the clock over the aurora).
         datePaint = Ui.text(Ui.semibold, 36 * k, 0xD9FFFFFF);
         datePaint.setTextAlign(Paint.Align.CENTER);
@@ -557,6 +559,15 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             }
             String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
             if (!stale.isEmpty() && n > 0) c.drawText(stale, right - total - 24 * k - cornerStale.measureText(stale), base, cornerStale);
+
+            if (mark != null) {
+                // Your brand, on the caption's line: white, over a faint shadow for bright photos.
+                float mx = right - mark.getWidth(), my = META_BASE * k - mark.getHeight();
+                markPaint.setColor(0x4D000000);
+                c.drawBitmap(mark, mx, my + 2 * k, markPaint);
+                markPaint.setColor(0x99FFFFFF);
+                c.drawBitmap(mark, mx, my, markPaint);
+            }
         } finally {
             chrome.endRecording();
         }

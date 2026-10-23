@@ -185,7 +185,7 @@ tagline=Light by day, dark by night
 accent=#0A84FF
 ```
 
-and a `logo.png` with a transparent background (one color reads best). `python3 tools/make_art.py --brand` draws the TV's icon and banner from the logo (and a logo, if there is none), then `./build.sh` builds it in. The name replaces "Free My TV" wherever it shows, in every language. The app stays `io.freemytv`, so it installs over Free My TV as an update and keeps your settings. Delete the folder to go back to Free My TV.
+and a `logo.png` with a transparent background (one color reads best). `python3 tools/make_art.py --brand` draws the TV's icon and banner from the logo (and a logo, if there is none), then `./build.sh` builds it in. The name replaces "Free My TV" wherever it shows, in every language; the logo shows in the settings, by the home screen's round buttons, on the screensaver and in All Apps; the accent colors the selected tab, what's focused and the settings' "On". The app stays `io.freemytv`, so it installs over Free My TV as an update and keeps your settings. Delete the folder to go back to Free My TV.
 
 ## How it works
 

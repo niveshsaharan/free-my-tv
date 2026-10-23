@@ -21,7 +21,7 @@ final class Brand {
 
     static final String STOCK = "Free My TV";
     static final String NAME = BrandConfig.NAME.isEmpty() ? STOCK : BrandConfig.NAME;
-    private static final SparseArray<Bitmap> LOGOS = new SparseArray<>();
+    private static final SparseArray<Bitmap> LOGOS = new SparseArray<>(), MASKS = new SparseArray<>();
 
     /** The line under the name in the settings: the tagline, or Free My TV's own. */
     static String tagline() {
@@ -34,14 +34,25 @@ final class Brand {
         return NAME.equals(STOCK) ? v : v + " · " + Ui.trf("based on {app}", "app", STOCK);
     }
 
-    /** The accent where it stands out from the background (3:1, the least for controls), else the usual color. */
+    /**
+     * The accent on this background: darkened (or, on a dark one, lightened) just enough to stand out (3:1, the least
+     * for large text and controls). The usual color without an accent. Worked out once, when a screen is made.
+     */
     static int accent(int usual, int background) {
         int a = BrandConfig.ACCENT;
-        return a != 0 && contrast(a, background) >= 3 ? a : usual;
+        if (a == 0) return usual;
+        int toward = luminance(background) > 0.18 ? Color.BLACK : Color.WHITE;
+        for (int step = 0; step <= 10; step++) {
+            int c = mix(a, toward, step * 0.06f);
+            if (contrast(c, background) >= 3) return c;
+        }
+        return usual;
     }
 
-    static boolean hasAccent() {
-        return BrandConfig.ACCENT != 0;
+    private static int mix(int a, int b, float f) {
+        return Color.rgb(Math.round(Color.red(a) + (Color.red(b) - Color.red(a)) * f),
+                Math.round(Color.green(a) + (Color.green(b) - Color.green(a)) * f),
+                Math.round(Color.blue(a) + (Color.blue(b) - Color.blue(a)) * f));
     }
 
     private static double contrast(int a, int b) {
@@ -80,7 +91,25 @@ final class Brand {
         return !NAME.equals(STOCK);
     }
 
-    /** The logo fitted into size × size px (its shape: drawn tinted), or null without one. Decoded once per size. */
+    /**
+     * The logo's shape alone (ALPHA_8), fitted into size × size px, or null without one: drawn with a Paint, it takes the
+     * Paint's color, so a tint that follows day and night costs no new filter.
+     */
+    static Bitmap logoMask(Context c, int size) {
+        synchronized (LOGOS) {
+            Bitmap m = MASKS.get(size);
+            if (m != null) return m;
+        }
+        Bitmap logo = logo(c, size);
+        if (logo == null) return null;
+        Bitmap m = logo.extractAlpha();
+        synchronized (LOGOS) {
+            MASKS.put(size, m);
+        }
+        return m;
+    }
+
+    /** The logo fitted into size × size px, in its own colors, or null without one. Decoded once per size. */
     static Bitmap logo(Context c, int size) {
         if (!BrandConfig.LOGO || size <= 0) return null;
         synchronized (LOGOS) {
