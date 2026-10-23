@@ -29,6 +29,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -52,13 +54,19 @@ final class Speed {
     /** Casting YouTube from a phone opens this app: it stays on (casting must keep working). */
     private static final String YOUTUBE = "com.google.android.youtube.tv";
     private static final Pattern PACKAGE = Pattern.compile("[A-Za-z][\\w.]*");
-    private static final Object WRITE = new Object(), SCAN = new Object();
+    private static final Object CHOSEN = new Object(), FILES = new Object(), SCAN = new Object();
     /** When the last list was made (uptime): a second request right after (Speed, then Turn off apps) uses it. */
     private static long scannedAt;
+    /** :home's copy of the choices, the newest (only :home changes them); the file catches up on WRITER. */
+    private static JSONObject chosen;
+    private static final ExecutorService WRITER = Executors.newSingleThreadExecutor();
 
     // MARK: - Choices
 
     static JSONObject choices(Context c) {
+        synchronized (CHOSEN) {
+            if (chosen != null) return copy(chosen);
+        }
         return read(new File(c.getFilesDir(), CHOICES));
     }
 
@@ -86,18 +94,35 @@ final class Speed {
 
     private interface Edit { void apply(JSONObject o) throws JSONException; }
 
-    /** Saves a change and asks the main process to apply it (soon after the last of several quick changes). */
+    /**
+     * Saves a change and asks the main process to apply it (soon after the last of several quick changes). The file is
+     * written on WRITER, in order: syncing it can take a while on a TV's storage, and the screen shouldn't wait.
+     */
     private static void change(Context c, Edit edit) {
-        synchronized (WRITE) {
-            JSONObject o = choices(c);
+        Context app = c.getApplicationContext();
+        JSONObject snapshot;
+        synchronized (CHOSEN) {
+            JSONObject o = chosen != null ? chosen : read(new File(app.getFilesDir(), CHOICES));
             try {
                 edit.apply(o);
             } catch (JSONException e) {
                 return;
             }
-            write(c, CHOICES, o);
+            chosen = o;
+            snapshot = copy(o);
         }
-        ModeJob.schedule(c, ModeJob.SPEED, null, 1_500);
+        WRITER.execute(() -> {
+            write(app, CHOICES, snapshot);
+            ModeJob.schedule(app, ModeJob.SPEED, null, 1_500);
+        });
+    }
+
+    private static JSONObject copy(JSONObject o) {
+        try {
+            return new JSONObject(o.toString());
+        } catch (JSONException e) {
+            return new JSONObject();
+        }
     }
 
     /** The picked apps with this value (ON or OFF). */
@@ -231,7 +256,16 @@ final class Speed {
     /** Makes the list in the main process (ModeJob.SCAN): with the TV's ADB, asking to allow it if needed. */
     static void scanNow(Context app) {
         synchronized (SCAN) {
-            if (scannedAt != 0 && SystemClock.uptimeMillis() - scannedAt < 10_000) return;
+            if (scannedAt != 0 && SystemClock.uptimeMillis() - scannedAt < 10_000) {
+                // The same list, marked as new, so the screen stops waiting for one.
+                JSONObject list = list(app);
+                try {
+                    list.put("at", System.currentTimeMillis());
+                } catch (JSONException ignored) {
+                }
+                write(app, LIST, list);
+                return;
+            }
             try (Adb adb = Adb.connect(app, 60_000, () -> writeList(app, "waiting", true))) {
                 scan(app, adb, HomeMode.state(app));
                 scannedAt = SystemClock.uptimeMillis();
@@ -351,7 +385,7 @@ final class Speed {
     }
 
     private static void write(Context c, String name, JSONObject o) {
-        synchronized (WRITE) {   // the scan's threads share the temporary file's name
+        synchronized (FILES) {   // the threads of a process share the temporary file's name
             File dir = c.getFilesDir(), tmp = new File(dir, name + "." + Process.myPid() + ".tmp");
             try (FileOutputStream out = new FileOutputStream(tmp)) {
                 out.write(o.toString().getBytes(StandardCharsets.UTF_8));

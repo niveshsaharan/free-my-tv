@@ -1,9 +1,13 @@
 package io.freemytv;
 
+import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Build;
 import android.os.SystemClock;
+import android.provider.Settings;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -289,7 +293,7 @@ final class HomeMode {
             // What an earlier install turned off and is still off stays ours: Original turns it back on.
             for (String pkg : ours) if (disabledNow.contains(pkg)) disabled.add(pkg);
             JSONObject before = state(c);
-            before.put("keptOff", new JSONArray(sorted(keptOff)));
+            before.put("keptOff", new JSONArray(sorted(keptOff))).put("disabled", new JSONArray(sorted(disabled)));
             save(c, before);
             Set<String> blocked = Speed.blocked(c, adb, state(c), picks(choices, core(home, dream, setupHome)));
             int done = 0;
@@ -298,14 +302,16 @@ final class HomeMode {
                 busy(c, Ui.trf("Turning off apps ({done}/{total})…", "done", done, "total", targets.size()));
                 if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg) || keptOff.contains(pkg)
                         || blocked.contains(pkg)) continue;
+                // Recorded before it goes off (here and on the TV): if this stops halfway, Original still turns it on.
+                boolean added = disabled.add(pkg);
+                if (added) remember(c, adb, disabled);
                 String out = adb.shell("pm disable-user --user 0 " + pkg);
-                if (out.contains("disabled-user")) {
-                    disabled.add(pkg);
-                    JSONObject now = state(c);
-                    now.put("disabled", new JSONArray(sorted(disabled)));
-                    save(c, now);
-                } else {
+                if (!out.contains("disabled-user")) {
                     AppLog.w("could not turn off " + pkg + ": " + out.trim());
+                    if (added) {
+                        disabled.remove(pkg);
+                        remember(c, adb, disabled);
+                    }
                 }
             }
             record(adb, disabled);
@@ -344,11 +350,12 @@ final class HomeMode {
             busy(c, Ui.tr("Turning the apps back on…"));
             String home = originalHome(s);
             // No switch yet in this install (it was installed again): only what the earlier one recorded comes back.
-            boolean fresh = !s.has("since");
+            boolean fresh = !s.has("since") && !FREE.equals(s.optString("mode"));
             Set<String> toEnable = new HashSet<>(stringList(s, "disabled"));
             if (!fresh) toEnable.addAll(core(home, originalDream(s), true));
             // And what an earlier install turned off: its list lives in the TV's settings (an uninstall erases ours).
-            toEnable.addAll(recorded(adb));
+            Set<String> earlier = recorded(adb);
+            toEnable.addAll(earlier);
             toEnable.removeAll(stringList(s, "keptOff"));
             Set<String> present = packages(adb, "");
             int done = 0;
@@ -366,7 +373,8 @@ final class HomeMode {
             // A new install: a launcher the person installed since stays, and the screensaver goes back only if it's ours.
             String holder = homeHolder(adb);
             boolean theirs = fresh && !holder.isEmpty() && !holder.contains(PKG) && packages(adb, "-3").contains(holder);
-            boolean homeOk = theirs || restoreHome(adb, home);
+            String back = fresh ? recordedHome(adb, earlier) : null;
+            boolean homeOk = theirs || restoreHome(adb, back != null ? back : home);
             if (!fresh || adb.shell("settings get secure screensaver_components").contains(PKG + "/")) restoreScreensaver(adb, s);
             boolean animationsOk = true;
             try {
@@ -498,10 +506,10 @@ final class HomeMode {
                 save(app, s);
             } catch (JSONException ignored) {}
             if (!FREE.equals(s.optString("mode"))) return;
-            List<String> fixed = new ArrayList<>(), failed;
+            List<String> fixed = new ArrayList<>(), failed = new ArrayList<>();
             try (Adb adb = Adb.connect(app, 10_000, null)) {
                 boolean reverted = s.optBoolean("homeReverted");
-                failed = reconcile(app, adb, s, fixed);
+                // The home screen and the screensaver first: the apps below take longer, and can fail on their own.
                 if (!reverted && !homeHolder(adb).contains(PKG)) {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
                     fixed.add(Ui.tr("the home screen"));
@@ -510,6 +518,11 @@ final class HomeMode {
                 if (!reverted && !Arrays.asList(adb.shell("settings get secure screensaver_components").trim().split(",")).contains(DREAM)) {
                     adb.shell("settings put secure screensaver_components " + DREAM);
                     fixed.add(Ui.tr("the screensaver"));
+                }
+                try {
+                    failed = reconcile(app, adb, s, fixed);
+                } catch (IOException | JSONException e) {
+                    notice(app, Ui.trf("Couldn't check Free My TV: {error}", "error", e.getMessage()));
                 }
             } catch (Exception e) {
                 notice(app, Ui.trf("Couldn't check Free My TV: {error}", "error", e.getMessage()));
@@ -555,27 +568,75 @@ final class HomeMode {
         List<String> keptOff = stringList(s, "keptOff");
         for (String pkg : sorted(wanted)) {
             if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg) || blocked.contains(pkg)) continue;
-            if (disabledNow.contains(pkg)) {
-                if (!keptOff.contains(pkg)) disabled.add(pkg);
-                continue;
-            }
+            // Recorded before it goes off: if this stops halfway (the job replaced, a slow command), it's still ours.
+            boolean added = !keptOff.contains(pkg) && disabled.add(pkg);
+            if (added) remember(c, adb, disabled);
+            if (disabledNow.contains(pkg)) continue;
             if (adb.shell("pm disable-user --user 0 " + pkg).contains("disabled-user")) {
-                if (!keptOff.contains(pkg)) disabled.add(pkg);
                 fixed.add(pkg);
+            } else if (added) {
+                disabled.remove(pkg);
+                remember(c, adb, disabled);
             }
         }
         List<String> failed = new ArrayList<>();
         for (String pkg : sorted(released)) {
             if (!disabled.contains(pkg)) continue;      // only what we turned off comes back from here
-            if (!present.contains(pkg) || adb.shell("pm enable " + pkg).contains("new state: enabled")) disabled.remove(pkg);
-            else failed.add(pkg);
+            if (!present.contains(pkg) || adb.shell("pm enable " + pkg).contains("new state: enabled")) {
+                disabled.remove(pkg);
+                remember(c, adb, disabled);
+            } else {
+                failed.add(pkg);
+            }
         }
+        remember(c, adb, disabled);     // and the TV's record in step with ours (it may predate it)
+        animations(c, adb, Speed.animations(choices));
+        return failed;
+    }
+
+    /**
+     * Whether an earlier install left something to undo (it was uninstalled in Free My TV mode): its records in the
+     * TV's settings, or this app still answering Home. Read without ADB, so Original on a new install that has nothing
+     * to undo stays a no-op (no "Allow USB debugging?").
+     */
+    static boolean leftovers(Context c) {
+        try {
+            ContentResolver r = c.getContentResolver();
+            for (String key : new String[] {RECORD, ANIMATIONS}) {
+                String v = Settings.Global.getString(r, key);
+                if (v != null && !v.trim().isEmpty() && !v.trim().equals("null")) return true;
+            }
+        } catch (RuntimeException e) {
+            return true;    // can't tell: look through ADB
+        }
+        ResolveInfo home = c.getPackageManager().resolveActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0);
+        return home != null && home.activityInfo != null && PKG.equals(home.activityInfo.packageName);
+    }
+
+    /** What Free My TV has turned off, saved in our state and in the TV's settings (which outlive an uninstall). */
+    private static void remember(Context c, Adb adb, Set<String> disabled) throws JSONException {
         record(adb, disabled);
         JSONObject latest = state(c);
         latest.put("disabled", new JSONArray(sorted(disabled)));
         save(c, latest);
-        animations(c, adb, Speed.animations(choices));
-        return failed;
+    }
+
+    /**
+     * After a reinstall, the home screen to give back: the one among what the earlier install turned off (its record
+     * on the TV), when there is exactly one. Our state, which knew it, went with the uninstall.
+     */
+    private static String recordedHome(Adb adb, Set<String> earlier) throws IOException {
+        String found = null;
+        for (String line : adb.shell("cmd package query-activities --brief --user 0 -a android.intent.action.MAIN"
+                + " -c android.intent.category.HOME").split("\n")) {
+            line = line.trim();
+            if (!COMPONENT.matcher(line).matches() || line.contains("FallbackHome")) continue;
+            String pkg = packageOf(line);
+            if (pkg.equals(PKG) || pkg.equals(GOOGLE_SETUP) || !earlier.contains(pkg)) continue;
+            if (found != null && !packageOf(found).equals(pkg)) return null;   // two: don't guess
+            if (found == null) found = line;
+        }
+        return found == null ? null : realHome(found);
     }
 
     /** The apps picked off on the Speed screen, other than the lists' and the mode's own: checked again before. */
@@ -594,7 +655,11 @@ final class HomeMode {
             try (Adb adb = connect(app, s)) {
                 busy(app, Ui.tr("Applying your choices…"));
                 List<String> failed = reconcile(app, adb, s, new ArrayList<>());
-                Speed.scan(app, adb, state(app));
+                try {
+                    Speed.scan(app, adb, state(app));
+                } catch (IOException e) {
+                    AppLog.w("speed: the list: " + e.getMessage());    // applied all the same; the screen asks again
+                }
                 done(app, null);
                 if (!failed.isEmpty()) notice(app, Ui.trf("Couldn't turn back on: {list}.", "list", names(app, failed)));
                 ModeJob.schedule(app, ModeJob.MEMORY, FREE, 120_000);
@@ -643,12 +708,19 @@ final class HomeMode {
         boolean same = true;
         for (int i = 0; i < SCALES.length; i++) {
             now[i] = adb.shell("settings get global " + SCALES[i]).trim();
-            if (!SCALE.matcher(now[i]).matches()) now[i] = "null";
+            // Not a number or "null" (an error message): change nothing rather than keep a wrong value to restore.
+            if (!SCALE.matcher(now[i]).matches()) throw new IOException("unexpected " + SCALES[i] + ": " + now[i]);
             same &= now[i].equals(target);
         }
         if (same) return false;
-        // Recorded first: if this stops halfway, Original still knows what to bring back.
-        if (!recorded) adb.shell("settings put global " + ANIMATIONS + " " + String.join(",", now));
+        // Recorded first, and read back: if this stops halfway, Original still knows what to bring back.
+        if (!recorded) {
+            String values = String.join(",", now);
+            adb.shell("settings put global " + ANIMATIONS + " " + values);
+            if (!adb.shell("settings get global " + ANIMATIONS).trim().equals(values)) {
+                throw new IOException("couldn't save the TV's animation scales");
+            }
+        }
         for (String key : SCALES) adb.shell("settings put global " + key + " " + target);
         AppLog.w("animations: " + choice);
         return true;

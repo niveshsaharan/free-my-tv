@@ -1068,7 +1068,8 @@ public class SettingsActivity extends Activity {
                         rowRect.left + 30 * k, base, rowLabel);
             }
             float hy = (LIST_TOP + 20 + rows * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
-            String note = freeActive() ? Ui.tr("OK turns an app off or back on.")
+            // Applied right away in Free My TV mode, even after the safety net gave the home screen back.
+            String note = HomeMode.FREE.equals(state.optString("mode")) ? Ui.tr("OK turns an app off or back on.")
                     : Ui.tr("Saved: they go off when you switch to Free My TV.");
             drawHint(c, 0, (pickScroll + focus + 1) + " / " + speedApps.size() + "  ·  " + note, x, hy);
         }
@@ -1235,9 +1236,10 @@ public class SettingsActivity extends Activity {
             Context c = getContext();
             if (screen == HOME_CHOICE) {
                 boolean wantFree = focus == 0;
-                // Original after a new install (no switch yet) still runs: an earlier install may have turned apps off.
+                // Original after a new install (no switch yet) runs when an earlier install left apps off to bring back.
                 boolean already = wantFree ? freeActive()
-                        : HomeMode.ORIGINAL.equals(state.optString("mode", HomeMode.ORIGINAL)) && state.has("since");
+                        : HomeMode.ORIGINAL.equals(state.optString("mode", HomeMode.ORIGINAL))
+                        && (state.has("since") || !HomeMode.leftovers(c));
                 if (!already && !busy()) {
                     HomeMode.request(c, wantFree ? HomeMode.FREE : HomeMode.ORIGINAL);
                     pendingAt = SystemClock.uptimeMillis();
