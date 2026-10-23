@@ -25,6 +25,8 @@ My choices, unless my message says otherwise:
 2. Accept **"Allow USB debugging?"** on the TV when you tell me: tick *Always allow*, then press OK. It can come up to
    three times: for this computer (if it's new to the TV), for the old app, and for Lumen itself.
 3. Answer when you ask me something, like which apps to turn off.
+4. If the Mac asks whether an app (your terminal, or the app you run in) may find devices on the local network, allow
+   it. adb can't reach the TV without that.
 
 ## Rules
 
@@ -48,6 +50,9 @@ My choices, unless my message says otherwise:
 
 ## Handy commands
 
+Run them in the repo folder (step 1). If the tools came from `tools/setup.sh` (step 2), start each command with
+`. .tools/env.sh && ` so `adb` and `java` are found.
+
 Keep only the TV connected: `adb devices` should list just it, so plain `adb` commands go to the TV. If anything else
 is listed, put `-s <IP>:5555` after `adb` in every command.
 
@@ -58,31 +63,39 @@ is listed, put `-s <IP>:5555` after `adb` in every command.
 - **What the Home button opens now** (the "Home check"):
   `adb shell cmd package resolve-activity --brief --user 0 -a android.intent.action.MAIN -c android.intent.category.HOME | tail -n 1`
 
-## 1. Tools on this computer
+## 1. The code
 
-Check what's already here:
+- **Reading this file from a clone** of `https://github.com/niveshsaharan/free-my-tv`? Run `git pull` in it and work
+  there.
+- **Otherwise, with git:** `git clone https://github.com/niveshsaharan/free-my-tv ~/lumen`, then work in `~/lumen`.
+  On a Mac, use git only if `xcode-select -p` answers with a folder. Without Apple's developer tools, `git` (and
+  `python3`) open an installer window instead of running.
+- **Without git:** download the code with `curl`, which every Mac has:
+  `rm -rf /tmp/free-my-tv-main && curl -fL -o /tmp/lumen.zip https://codeload.github.com/niveshsaharan/free-my-tv/zip/refs/heads/main && unzip -qo /tmp/lumen.zip -d /tmp && mv /tmp/free-my-tv-main ~/lumen`,
+  then work in `~/lumen`.
 
-- `git --version`, `python3 --version` and `adb version`.
-- `java -version`: needs 17 or newer.
-- The Android SDK (`$ANDROID_HOME`, or `~/Library/Android/sdk`, `~/Android/Sdk` or Homebrew's
-  `android-commandlinetools`), with `build-tools` 34 or newer and `platforms/android-34`.
+From here on, "the repo folder" is that folder. If `./build.sh` or a script in `tools/` says "permission denied",
+run it with `bash` in front.
 
-Install only what's missing:
+## 2. Tools on this computer
 
-- **macOS:** `brew install --cask temurin android-commandlinetools android-platform-tools`, then
-  `sdkmanager "build-tools;34.0.0" "platforms;android-34"`.
-- **Linux:** OpenJDK 17, Android's command-line tools and adb from the package manager, then the same `sdkmanager`
-  line.
-- **Windows:** Git Bash (or WSL), then as on Linux.
+The build needs a JDK (17 or newer) and Android's build tools, and you need `adb` to reach the TV. This Mac doesn't
+have to have any of them.
 
-`sdkmanager` asks you to accept Google's Android SDK license. I accept it, so you may answer yes
-(`yes | sdkmanager --licenses`).
+1. **If they're already installed,** skip this step: `java -version` says 17 or newer, `adb version` answers, and the
+   Android SDK (`$ANDROID_HOME`, `~/Library/Android/sdk` or `~/Android/Sdk`) has `build-tools` 34 or newer and
+   `platforms/android-34`.
+2. **Otherwise, run** `tools/setup.sh --accept-android-sdk-license` in the repo folder. I accept the Android SDK
+   License Agreement, so you may pass that flag.
+   - It downloads Amazon's JDK 17 (Corretto), Android's build-tools and platform 34, and adb (about 350 MB) into
+     `.tools/` in the repo folder.
+   - It checks each download against the checksum Amazon or Google publishes.
+   - It needs no Homebrew and no password, and installs nothing on the Mac.
+   - It ends with `Ready`.
+3. **Using them:** `./build.sh` and `tools/tv-report.sh` find these tools by themselves. For your own `adb` and `java`
+   commands, start each command with `. .tools/env.sh && `.
 
-## 2. The code
-
-If you're reading this file from a clone of `https://github.com/niveshsaharan/free-my-tv`, run `git pull` in it and
-work there. Otherwise run `git clone https://github.com/niveshsaharan/free-my-tv ~/lumen` and work in `~/lumen`.
-From here on, "the repo folder" is that folder.
+On Windows, install a JDK 17, Android's command-line tools and adb as the README says (Git Bash or WSL).
 
 ## 3. Settings (`config.properties`)
 
@@ -118,21 +131,11 @@ From here on, "the repo folder" is that folder.
 
 Tell me: "Ready for the TV part: please stay by the TV with the remote for about 15 minutes." Then:
 
-1. **If you don't have the IP,** check `adb devices`: it may already list the TV. If not, look for port 5555 on this
-   network:
-   ```bash
-   python3 - <<'EOF'
-   import socket, ipaddress, concurrent.futures
-   s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("192.0.2.1", 9)); me = s.getsockname()[0]; s.close()
-   def probe(ip):
-       try:
-           with socket.create_connection((str(ip), 5555), timeout=0.5): return str(ip)
-       except OSError: return None
-   with concurrent.futures.ThreadPoolExecutor(64) as ex:
-       print([ip for ip in ex.map(probe, ipaddress.ip_network(me + "/24", strict=False).hosts()) if ip])
-   EOF
-   ```
-   More than one found? Connect to each, run `adb shell getprop ro.product.manufacturer`, and keep the Xiaomi.
+1. **If you don't have the IP,** check `adb devices`: it may already list the TV. If not, look for it on this network
+   with `java tools/FindTv.java`, from the repo folder. It lists the devices that answer on port 5555 and needs only
+   Java. More than one found? Connect to each, run `adb shell getprop ro.product.manufacturer`, and keep the Xiaomi.
+   Nothing found: ask me for the IP (Settings → Network & Internet on the TV), and check that the Mac allowed local
+   network access.
 2. **Connect:** `adb connect <IP>:5555`. Then `adb devices` must show `<IP>:5555  device`.
    - **`unauthorized`:** the TV is asking "Allow USB debugging?". Tell me, and wait.
    - **Connection refused, or no answer:** debugging is off. Ask me to turn it on: Settings → Device Preferences (or
@@ -239,8 +242,10 @@ If Lumen is already on the TV from another computer and this fails with `INSTALL
    - Going back is *Lumen* → *Home Screen* → *Original*.
    - The apps on the home screen and the round top buttons are set in *Lumen* → *Shelf* and *Top Buttons*.
    - Keep `~/Lumen-backup` (the signing key and the settings).
-   - Updates, which keep everything as it is: in the repo folder, run `git pull`, `./build.sh` and
-     `adb install -r Lumen.apk`.
+   - Updates, which keep everything as it is: in the repo folder, run `git pull`, then `./build.sh` and
+     `adb install -r Lumen.apk`. Without git: rename the old folder, download the code again as in step 1, copy
+     `config.properties` and `lumen.keystore` into it from `~/Lumen-backup`, move `.tools/` over from the old folder
+     (then run `tools/setup.sh --accept-android-sdk-license`, which only fixes its paths), and build and install.
    - USB debugging stays on: Lumen uses the TV's own debugging to check itself after restarts and to apply Speed.
    - If the TMDB key was empty and I add it later, run `./build.sh` and `adb install -r Lumen.apk` again.
 3. **Disconnect:** `adb disconnect`.

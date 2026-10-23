@@ -52,6 +52,8 @@ About ten minutes. You need a Google TV or Android TV (Android 8 or newer) and a
    sdkmanager "build-tools;34.0.0" "platforms;android-34"
    ```
    On Linux, get OpenJDK 17, Android's command-line tools and adb from your package manager, then run the same `sdkmanager` line. On Windows, use Git Bash (which Claude Code uses there) or WSL.
+
+   **Nothing installed, and no Homebrew?** After the `git clone` in step 3 (or a download of the code), run `tools/setup.sh --accept-android-sdk-license` in the folder. It works on macOS and Linux, and accepts the [Android SDK License](https://developer.android.com/studio/terms) for you. It puts a JDK 17, the build-tools, the platform and adb in `.tools/` there (about 350 MB, no password, nothing installed on the computer), checked against their published checksums. `build.sh` then uses them by itself; for `adb`, run `. .tools/env.sh` first.
 3. **Build:**
    ```bash
    git clone https://github.com/niveshsaharan/free-my-tv lumen && cd lumen

@@ -8,6 +8,8 @@
 set -u
 export MSYS_NO_PATHCONV=1   # Git Bash would turn /data and /proc/... into Windows paths
 cd "$(dirname "$0")/.." || exit 1
+# shellcheck source=/dev/null
+if [ -f .tools/env.sh ]; then . ./.tools/env.sh; fi   # adb from tools/setup.sh
 
 [ $# -ge 1 ] || { echo "Usage: tools/tv-report.sh <TV IP> [label]"; exit 1; }
 command -v adb >/dev/null 2>&1 || { echo "adb not found: install Android's platform-tools (see README)."; exit 1; }

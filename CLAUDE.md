@@ -29,6 +29,12 @@ remote's buttons over adb: when they point you to it, follow it (it says where i
      `sdkmanager "build-tools;34.0.0" "platforms;android-34"`.
    - Linux: OpenJDK 17, Android's command-line tools and adb from the package manager, then the same `sdkmanager` line.
    - Windows: Git Bash (what Claude Code runs there; `build.sh` handles it) or WSL, then as on Linux.
+   - Nothing installed and no Homebrew (macOS or x86-64 Linux)? Run `tools/setup.sh --accept-android-sdk-license`
+     once they're OK with the Android SDK License (developer.android.com/studio/terms). It downloads Corretto 17,
+     build-tools 35.0.1, android-34 and adb into `.tools/` (about 350 MB), checked against pinned checksums, with no
+     password and nothing installed. `build.sh` and `tools/tv-report.sh` use them; for `adb`, `. .tools/env.sh` first.
+     On a fresh Mac, `git` and `python3` open Apple's developer-tools installer: get the code as a zip from
+     codeload.github.com instead, and find the TV with `java tools/FindTv.java` (port 5555 on the local /24).
 3. **Settings:** run `./build.sh` once; it creates `config.properties`. Fill in `latitude` and `longitude` (decimal
    degrees) and `city` for their city, `tmdb_region` (two-letter country), `show_crypto`, `currency` and `temperature` to match.
 4. **The TMDB key is theirs and secret.** Ask them to create one (free: themoviedb.org → Settings → API) and paste it
