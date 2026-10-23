@@ -127,13 +127,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private boolean nightTarget;
     private float night, nightFrom;     // 0 = day, 1 = night
     private long nightAt;
-    private final int[] glassNight = new int[Backdrop.GW * Backdrop.GH], frostNight = new int[Backdrop.FW * Backdrop.FH];
-    private final int[] neutralGlassPx = new int[Backdrop.GW * Backdrop.GH], neutralFrostPx = new int[Backdrop.FW * Backdrop.FH];
+    // Blending buffers for the glass, made on first use (never without AGSL, where the glass reads no image).
+    private int[] glassNight, frostNight, neutralGlassPx, neutralFrostPx;
     private boolean nightPair;          // the glass holds both photos (day and night), blended by `night`
     private Shader nightGradient;
 
     // At the top: tabs (0 to 2) and icon-only buttons (3 to 5); the three cards
-    private int tab, topIndex, cardIndex;
+    private int tab, topIndex, cardIndex, cardsSignature;
     private int widgetIndex;    // with TalkBack on, the drawer's weather (0) or quotes (1) card can take the focus
     private List<Recs.Pick> cards = new ArrayList<>();
     private final Spring[] topFocus = new Spring[6];
@@ -194,7 +194,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Spring heroFocus = new Spring(0.28f, 0.85f, 0);
     private final RectF heroButton = new RectF();
     private Backdrop bgFrom, bgTo;     // null = gradient (no photo)
-    private final int[] frostMix = new int[Backdrop.FW * Backdrop.FH];
+    private int[] frostMix;
 
     // Bottom drawer
     private List<HomeApps.Item> drawerItems = new ArrayList<>();
@@ -208,6 +208,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // "All Apps" sheet
     private List<HomeApps.Item> others = new ArrayList<>();
+    private boolean appsStale = true;   // the shelf and All Apps are built again on the next reload
+    private String appsLocale = "";
     private Spring[] gridFocus = new Spring[0];
     private String[] gridLabels;
     private final Spring sheet = new Spring(0.38f, 0.9f, 0);
@@ -385,10 +387,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sheetLayer.setVisibility(INVISIBLE);
         scene.setMotion(0.6f, 0f);
         updatePalette();
-        // First time: right away (a cold start opens with the apps already there); missing logos come from reload().
+        // First time: right away (a cold start opens with the apps already there); missing logos come from reload(),
+        // and so does the drawer (it isn't on screen yet).
+        HomeApps.refreshLaunchable(a);
         setShelf(HomeApps.shelf(a, false));
-        setStatusItems(statusList(a));
-        setDrawerItems(drawerList(a));
     }
 
     // MARK: - Lifecycle (called by HomeActivity)
@@ -483,8 +485,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         wake();
         updatePalette();
         checkNight(true);
-        layoutStatus();
-        heroDirty = statusDirty = drawerDirty = true;
+        heroDirty = drawerDirty = true;
         platter.invalidate();
     }
 
@@ -656,18 +657,18 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // drop frames (measured: ~50 ms of GPU per frame). The app tiles have no glass; the top buttons fade out as
         // they rise; the drawer is drawn resting in place; the glass shelf is redrawn once the drawer stops, so the
         // glass shows the background where it ended up.
+        // During a background swap only glass that reads the background changes (flat glass before Android 13 doesn't).
+        boolean glassFading = bgFading && scene.glassy();
         if (tilesMoving || tilesDirty) tiles.invalidate();
-        if (statusMoving || statusDirty || bgFading) status.invalidate();
+        if (statusMoving || statusDirty || glassFading) status.invalidate();
         if (heroMoving || heroDirty || heroFading) heroLayer.invalidate();
-        if (drawerItemsMoving || drawerDirty || bgFading) drawerLayer.invalidate();
+        if (drawerItemsMoving || drawerDirty || glassFading) drawerLayer.invalidate();
         if (gridMoving || gridDirty) sheetLayer.invalidate();
         if (drawerMoving || bgFading) sky.invalidate();
-        if (bgFading || (drawerWasMoving && !drawerMoving)) platter.invalidate();
+        if (glassFading || (drawerWasMoving && !drawerMoving)) platter.invalidate();
         drawerWasMoving = drawerMoving;
         tilesDirty = statusDirty = heroDirty = drawerDirty = gridDirty = motionDirty = false;
         if (updateClock()) {
-            layoutStatus();
-            status.invalidate();
             if (hero != null && hero.clock) {
                 refreshHero(false);
                 heroLayer.invalidate();
@@ -842,18 +843,24 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (night >= 0.999f) return b.nightGlass;
         // During the transition, the blend (only for the current background; a photo fading in uses the nearer side).
         if (b != bgTo) return night < 0.5f ? b.lightGlass : b.nightGlass;
+        if (glassNight == null) glassNight = new int[Backdrop.GW * Backdrop.GH];
         for (int i = 0; i < glassNight.length; i++) glassNight[i] = mix(b.lightGlass[i], b.nightGlass[i], night);
         return glassNight;
     }
 
     /** No photo: the glass reads the background's own gray (not Scene's default aurora, which isn't on screen). */
     private void neutralGlass() {
+        nightPair = false;
+        if (!scene.glassy()) return;
+        if (neutralGlassPx == null) {
+            neutralGlassPx = new int[Backdrop.GW * Backdrop.GH];
+            neutralFrostPx = new int[Backdrop.FW * Backdrop.FH];
+        }
         int color = blend(0xFFEBEBF0, 0xFF141416, night);
         java.util.Arrays.fill(neutralFrostPx, color);
         java.util.Arrays.fill(neutralGlassPx, color);
         scene.setFrost(neutralFrostPx);
         scene.setGlassImage(neutralGlassPx);
-        nightPair = false;
     }
 
     /** What the frosted glass shows (drawer, toasts): the blurred photo, darkened at night. */
@@ -861,6 +868,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (b.nightFrost == null || night <= 0.001f) return b.frost;
         if (night >= 0.999f) return b.nightFrost;
         if (b != bgTo) return night < 0.5f ? b.frost : b.nightFrost;
+        if (frostNight == null) frostNight = new int[Backdrop.FW * Backdrop.FH];
         for (int i = 0; i < frostNight.length; i++) frostNight[i] = mix(b.frost[i], b.nightFrost[i], night);
         return frostNight;
     }
@@ -953,6 +961,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (bgTo != null && bgFrom != null && glassOf(bgFrom) != null && glassOf(bgTo) != null) {
             if (drawerLayer.getVisibility() == VISIBLE || toast != null) {
                 int[] from = frostOf(bgFrom), to = frostOf(bgTo);
+                if (frostMix == null) frostMix = new int[Backdrop.FW * Backdrop.FH];
                 for (int i = 0; i < frostMix.length; i++) frostMix[i] = mix(from[i], to[i], e);
                 scene.setFrost(frostMix);
             }
@@ -963,7 +972,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             bgFrom = null;
             if (bgTo == null) {
                 neutralGlass();
-            } else {
+            } else if (scene.glassy()) {
                 scene.setFrost(frostOf(bgTo));
                 if (glassOf(bgTo) != null) scene.setGlassImage(glassOf(bgTo));
             }
@@ -1032,36 +1041,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     // MARK: - Corner capsule: time and weather (when the hero shows a recommendation) and icon-only buttons
-
-    /** Live TV, the inputs with a device on, All Apps and Settings. */
-    private static List<HomeApps.Item> statusList(Context c) {
-        List<HomeApps.Item> list = new ArrayList<>();
-        list.addAll(HomeApps.shortcuts(c));
-        list.add(HomeApps.settings());
-        return list;
-    }
-
-    private void setStatusItems(List<HomeApps.Item> list) {
-        boolean same = list.size() == statusItems.size();
-        for (int i = 0; same && i < list.size(); i++) same = list.get(i).key.equals(statusItems.get(i).key);
-        String focusedKey = statusIndex < statusItems.size() ? statusItems.get(statusIndex).key : null;
-        statusItems = list;
-        if (!same || statusFocus.length != list.size()) {
-            statusFocus = new Spring[list.size()];
-            statusRects = new RectF[list.size()];
-            int index = Math.min(statusIndex, Math.max(0, list.size() - 1));
-            for (int i = 0; i < statusFocus.length; i++) {
-                statusFocus[i] = new Spring(0.26f, 0.85f, 0);
-                statusRects[i] = new RectF();
-                if (list.get(i).key.equals(focusedKey)) index = i;   // a device came on: keep focus on the same button
-            }
-            statusIndex = index;
-            if (zone == Z_STATUS && list.isEmpty()) zone = Z_SHELF;
-            aim(statusFocus, zone == Z_STATUS ? statusIndex : -1, true);   // only the capsule's springs
-            statusDirty = true;
-        }
-        layoutStatus();
-    }
 
     private boolean showInfo() {
         return hero != null && !hero.clock;
@@ -1922,17 +1901,25 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - Lists (in the background, so returning to the home screen isn't delayed)
 
+    /**
+     * The shelf and All Apps are built again only when apps changed (or the TV's language, for their names); the
+     * drawer every time, since it follows the inputs.
+     */
     private void reload() {
         final Context c = getContext().getApplicationContext();
+        final String locale = java.util.Locale.getDefault().toLanguageTag();
+        final boolean stale = appsStale || !locale.equals(appsLocale);
         LOADER.execute(() -> {
-            final List<HomeApps.Item> s = HomeApps.shelf(c, true);
-            final List<HomeApps.Item> st = statusList(c);
+            final boolean apps = HomeApps.refreshLaunchable(c) || stale;
+            final List<HomeApps.Item> s = apps ? HomeApps.shelf(c, true) : null;
             final List<HomeApps.Item> d = drawerList(c);
-            final List<HomeApps.Item> o = HomeApps.others(c);
+            final List<HomeApps.Item> o = apps ? HomeApps.others(c) : null;
             handler.post(() -> {
-                setShelf(s);
-                setStatusItems(st);
+                if (s != null) setShelf(s);
                 setDrawerItems(d);
+                if (o == null) return;
+                appsLocale = locale;
+                appsStale = sheetOpen;      // All Apps is open: its new list waits for the next time
                 if (!sheetOpen) setOthers(o);
             });
         });
@@ -2628,9 +2615,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 retarget(false);
             }
         }
-        for (Recs.Pick p : recs.wanted()) recs.backdrop(p);   // all three tabs preloaded: switching tabs is instant
+        // What the cards show (the picks, their texts, whether their photos are ready): redrawn only when it changes.
+        // These photos are asked for first, then the other tabs' (preloaded: switching tabs is instant).
+        int signature = tab;
+        for (Recs.Pick p : cards) {
+            signature = signature * 31 + p.id;
+            signature = signature * 31 + java.util.Objects.hashCode(p.kind);
+            signature = signature * 31 + java.util.Objects.hashCode(p.title);
+            signature = signature * 31 + java.util.Objects.hashCode(p.meta);
+            signature = signature * 31 + (recs.backdrop(p) != null ? 1 : 0);
+        }
+        for (Recs.Pick p : recs.wanted()) recs.backdrop(p);
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(0));
         if (cards.isEmpty() || b != null) showBackdrop(b);
+        if (signature == cardsSignature) return;
+        cardsSignature = signature;
         heroDirty = true;
         spoken.focusMoved();    // new picks under the focused card
     }

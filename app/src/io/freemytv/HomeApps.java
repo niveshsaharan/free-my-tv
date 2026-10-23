@@ -3,9 +3,11 @@ package io.freemytv;
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -128,15 +130,15 @@ final class HomeApps {
         PackageManager pm = c.getPackageManager();
         for (String pkg : shelfPackages(c)) {
             if (items.size() >= MAX_SHELF) break;
-            Intent launch = launchIntent(pm, pkg);
-            if (launch == null) continue;
-            ResolveInfo ri = pm.resolveActivity(launch, 0);
+            if (!isLaunchable(c, pkg)) continue;
             String[] d = known(pkg);
             Item it = new Item();
             it.kind = APP;
             it.pkg = pkg;
             if (d == null) {
                 // An app picked in Settings > Shelf that isn't in SHELF: its own name and TV art.
+                Intent launch = launchIntent(pm, pkg);
+                ResolveInfo ri = launch == null ? null : pm.resolveActivity(launch, 0);
                 it.key = pkg;
                 it.label = ri != null ? String.valueOf(ri.loadLabel(pm)) : pkg;
                 it.tile = appTile(c, null, pkg, 0);
@@ -164,17 +166,15 @@ final class HomeApps {
         List<String> custom = Prefs.shelf();
         if (custom != null) return custom;
         List<String> out = new ArrayList<>();
-        PackageManager pm = c.getPackageManager();
-        for (String[] d : SHELF) if (out.size() < MAX_SHELF && launchIntent(pm, d[2]) != null) out.add(d[2]);
+        for (String[] d : SHELF) if (out.size() < MAX_SHELF && isLaunchable(c, d[2])) out.add(d[2]);
         return out;
     }
 
     /** Every app the shelf could hold, as {package, name}: the ones from SHELF first, then the other TV apps by name. */
     static List<String[]> shelfCandidates(Context c) {
-        PackageManager pm = c.getPackageManager();
         List<String[]> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        for (String[] d : SHELF) if (launchIntent(pm, d[2]) != null && seen.add(d[2])) out.add(new String[] {d[2], d[1]});
+        for (String[] d : SHELF) if (isLaunchable(c, d[2]) && seen.add(d[2])) out.add(new String[] {d[2], d[1]});
         List<String[]> more = new ArrayList<>();
         for (String[] app : launchable(c)) {
             if (app[0].equals(c.getPackageName()) || HIDDEN.contains(app[0]) || !seen.add(app[0])) continue;
@@ -483,6 +483,46 @@ final class HomeApps {
     static Intent launchIntent(PackageManager pm, String pkg) {
         Intent intent = pm.getLeanbackLaunchIntentForPackage(pkg);
         return intent != null ? intent : pm.getLaunchIntentForPackage(pkg);
+    }
+
+    // Which apps open, as a snapshot: the home screen asks about the same apps on every Home press and every 15 s, and
+    // each PackageManager call is a round trip to the system, slow on a 1-2 GB TV.
+    private static volatile Set<String> launchable;
+    private static volatile boolean appsChanged = true;
+    private static boolean watching;
+
+    /** launchIntent(pkg) != null, from the snapshot once there is one. */
+    static boolean isLaunchable(Context c, String pkg) {
+        Set<String> s = launchable;
+        return s != null ? s.contains(pkg) : launchIntent(c.getPackageManager(), pkg) != null;
+    }
+
+    /** Takes the snapshot again if apps were installed, removed, updated, turned on or off. True if it did. */
+    static synchronized boolean refreshLaunchable(Context c) {
+        if (!watching) {
+            IntentFilter changes = new IntentFilter();
+            changes.addAction(Intent.ACTION_PACKAGE_ADDED);
+            changes.addAction(Intent.ACTION_PACKAGE_REMOVED);
+            changes.addAction(Intent.ACTION_PACKAGE_CHANGED);
+            changes.addAction(Intent.ACTION_PACKAGE_REPLACED);
+            changes.addDataScheme("package");
+            c.getApplicationContext().registerReceiver(new BroadcastReceiver() {
+                @Override public void onReceive(Context context, Intent intent) { appsChanged = true; }
+            }, changes);
+            watching = true;
+        }
+        if (!appsChanged && launchable != null) return false;
+        appsChanged = false;    // before the queries: a change during them takes the snapshot again next time
+        PackageManager pm = c.getPackageManager();
+        Set<String> out = new HashSet<>();
+        // The categories launchIntent looks for: the TV launcher, then INFO and LAUNCHER (getLaunchIntentForPackage).
+        for (String category : new String[] {Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_INFO, Intent.CATEGORY_LAUNCHER}) {
+            for (ResolveInfo ri : pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(category), 0)) {
+                out.add(ri.activityInfo.packageName);
+            }
+        }
+        launchable = out;
+        return true;
     }
 
     // MARK: - Colored logos (shelf)
