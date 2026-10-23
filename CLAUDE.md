@@ -4,6 +4,9 @@ A home screen for Google TV and Android TV that replaces the stock one, plus a s
 Lumen and the TV's original home screen. A plain Android app in Java, built without Gradle by `build.sh`.
 LG TVs (webOS) and Samsung TVs (Tizen) get the same home screen as a web app: `web/`, packed by `webos/` and `tizen/`
 (see below).
+Before you push, run `tools/check.sh`: the Google TV build, `translate.py --check`, the LG and Samsung packages and
+ES5 in `web/` (syntax and the newer calls old TVs lack). Every pull request and push to `main` runs it too
+(`.github/workflows/check.yml`).
 
 The person you're helping may not be technical. Keep it short and friendly, say what you're about to do on their TV
 before you do it, and let them do the taps on the TV.
@@ -133,7 +136,11 @@ Then, in the code:
 
 - `HomeMode.DEBLOAT`: add the brand's promo, demo, store-mode and telemetry apps, one comment per line. Only those.
 - `HomeMode.PROTECTED`: add the brand's system pieces: picture, sound, inputs and HDMI-CEC, the tuner and live TV,
-  remote and Bluetooth pairing, setup, updates, system UI. When in doubt, protect it.
+  remote and Bluetooth pairing, setup, updates, system UI. When in doubt, protect it. `mayTurnOff` also refuses
+  Android's own pieces (`CORE`: with the permission controller or package installer off, a TV may not start again) and
+  factory menus (`FACTORY`), and `neededByTv` keeps on, on the TV itself, anything that asks for `TV_INPUT_HARDWARE`
+  (the layer under HDMI and the tuner: off, inputs show "No signal") or receives the remote's Input key
+  (`fusion.android.tv.demo` does on several MediaTek boards).
 - `HomeApps.SHELF`, `LIVE_TV_APPS` and `HIDDEN`: the shelf apps, the brand's live TV app, apps to hide from All Apps.
 - Build, install, have them switch on the TV, read `adb logcat -s Lumen`, then have them switch back to
   *Original* once and confirm everything returned.
@@ -234,15 +241,24 @@ lumen_animations` shows three values, they are the TV's `window_animation_scale`
   id in `SAMSUNG_ICONS` (SVGs need a width and height for old WebKit); some names are empty or long
   (`SAMSUNG_TITLES`); and Tizen 3 answers no "settings" app control, so TV Settings opens `org.tizen.menu`.
   `web/home.js` follows `HomeView`'s layout and behavior, so a design change on
-  Android belongs there too. Text: `tr(pt, en, es)`, with the German and Russian in `web/strings.js` (keyed by the English). Built without a city (`--generic`), `web/zones.js`
+  Android belongs there too. Text: the same catalogues as Android, packed into `i18n.js` by `tools/webapp.py` (only
+  the keys `web/` uses): `tr('Live TV')`, `trf('{n} min ago', {n: 12})`, `plural('plural|…', n)` and
+  `formatDate('format|h:mm a', at)` (the catalogue's SimpleDateFormat pattern, written by `web/strings.js`), and
+  `tools/translate.py` reads those calls too. Built without a city (`--generic`), `web/zones.js`
   (`tools/make_zones.py`, from the tz database) turns the TV's time zone into the city, the currency and the region.
   `tools/webapp.py` is what both builds share. Preview: `python3 webos/build.py --preview` (or `tizen/build.py`), then
   open `out/webos/index.html` in a browser (a stand-in lists sample apps).
 
 ## Always
 
+- Google TV's setup app (`setupwraith`) goes off before the stock home screen and comes back after it, everywhere
+  (`core` order, `applyFree`, `applyOriginal`, `revertHomeNow`, `reconcile`): with the home screen off and it on, its
+  RecoveryActivity takes Home, and a restart there factory-reset a Xiaomi. If it can't go off, the home screen stays on.
+  The Kalley 43G200 (`R3_GTV`) turns it back on at every start and boot-looped without its home screen: the switch
+  refuses there.
 - Never turn off an app that saved a Wi-Fi network: Android deletes its networks and Original can't bring them
-  back (`wifiOwners` in `HomeMode`).
+  back (`wifiOwners` in `HomeMode`). When the Wi-Fi service doesn't answer, the switch stops on Wi-Fi, and the boot
+  check and *Speed* leave the setup app, the stock home screen and the picked apps for later.
 - Never commit `config.properties`, `*.keystore` or any key.
 - Never uninstall or clear the data of system apps; only `pm disable-user --user 0`, through `HomeMode`, so
   *Original* can bring it back.
@@ -250,4 +266,5 @@ lumen_animations` shows three values, they are the TV's `window_animation_scale`
 - Keep the way back working: the *Original* mode and the watchdog.
 - *Speed* offers only apps that open from a launcher and the `DEBLOAT` apps, never system-uid or persistent ones (a
   crash loop there can make Android offer a factory reset), home screens, TV inputs, keyboards, accessibility or
-  Wi-Fi-owning apps (`Speed.lock`, checked again before every change). Keep it that way.
+  Wi-Fi-owning apps, or anything `mayTurnOff` refuses (`Speed.lock`, checked again before every change, and
+  `neededByTv` too). Keep it that way.

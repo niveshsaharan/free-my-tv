@@ -41,7 +41,7 @@ About ten minutes. You need a Google TV or Android TV (Android 8 or newer) and a
    > Install Lumen on my TV at 192.168.1.50. I live in Lisbon.
 
    It installs the tools it needs, builds the app and puts it on your TV, and asks before anything important. Swap in your TV's IP and your city.
-3. **On the TV**, open *Lumen* → *Home Screen* → *Lumen*, and accept the debugging prompt (tick *Always allow*).
+3. **On the TV**, open *Lumen* → *Home Screen* → *Lumen*. That's when the TV asks *Allow USB debugging?* for Lumen: tick *Always allow* and accept.
 
 ### The manual way
 
@@ -67,7 +67,7 @@ About ten minutes. You need a Google TV or Android TV (Android 8 or newer) and a
    ```bash
    adb shell "appops set io.lumen.tv AUTO_START allow || appops set io.lumen.tv APP_AUTO_START allow"
    ```
-5. **On the TV**, open *Lumen* → *Home Screen* → *Lumen*.
+5. **On the TV**, open *Lumen* → *Home Screen* → *Lumen*. The TV asks *Allow USB debugging?* once more, now for Lumen itself: tick *Always allow* and accept.
 
 ## LG TVs (webOS)
 
@@ -113,12 +113,13 @@ The first values come from `config.properties`, created by the first build (Goog
 | `latitude`, `longitude` | Your city, for the weather and the sunset | New York |
 | `city` | The name on the weather card | `Weather` |
 | `hide_animation` | Leave cartoons and anime out of the picks | `false` |
-| `language` | `auto` (follows the TV), or a language with a [translation](#translations) (`en`, `pt`, `es`, `de`, `ru`, `fr`, `ja`…) on Google TV; `en`, `es`, `pt`, `ru` or `de` on LG and Samsung | `auto` |
+| `language` | `auto` (follows the TV), or a language with a [translation](#translations) (`en`, `pt`, `es`, `de`, `ru`, `fr`, `ja`…) | `auto` |
 | `show_crypto` | Show Binance crypto prices on home and screensaver | `true` |
 | `currency` | Crypto prices in `USD`, `EUR`, `BRL`… | `USD` |
 | `temperature` | `C`, `F` or `auto` | `auto` |
 | `disable_assistant` | Also turn off Google Assistant (on the TV: *Speed* → *Google Assistant*) | `false` |
 | `hide_services` | Streaming services to leave out of the picks even when their app is on the TV (`netflix`, `prime`, `disney`…), comma separated; for apps the TV ships that you don't subscribe to. Google TV only | empty |
+| `hide_apps` | Apps to leave out of the shelf, All Apps and the picks, by id or name (part of it), comma separated; for apps the TV ships that can't be uninstalled, like Samsung's built-in Netflix. LG and Samsung only | empty |
 
 Changed something? Run `./build.sh` and install again. Keep `lumen.keystore`: updates are signed with it.
 
@@ -150,7 +151,8 @@ To remove it for good, switch to *Original* first, then uninstall *Lumen* (Setti
   - the apps you pick in *Lumen* → *Speed* → *Turn off apps*. It offers only apps you can open and the promo apps above, never the TV's own pieces; apps that keep your Wi-Fi, your keyboard, accessibility apps, YouTube (casting from a phone opens it) and apps that were off before stay as they are.
 - *Speed* → *Animations* makes the TV's own animations twice as fast, or turns them off; *Normal* and *Original* bring back the TV's values.
 - On TCL TVs, the remote's Netflix, YouTube and Prime buttons keep working through a small accessibility service that only reads those buttons. Pick what each one opens in *Lumen* → *Remote Buttons*; *Original* turns the service off. On Vestel-made TVs (F&U and other store brands) and Xiaomi (Formovie) projectors the same goes for the Netflix button, and on KTC-made TVs (NextStar) for the Tabii button. On Sony TVs, the BRAVIA CORE, Netflix, Disney+, Prime Video, YouTube and Crunchyroll buttons (and Google Play, on remotes that have it) can each open the app you pick, or keep Sony's default.
-- Picture, sound, inputs, remote pairing, Google services and the Play Store are on a protected list, checked before every change.
+- Picture, sound, inputs, remote pairing, Google services and the Play Store are on a protected list, checked before every change, and so are Android's own pieces and factory menus. Before anything goes off, the TV is asked whether its inputs or its remote's Input key depend on it; those stay on.
+- On Google TV, the setup app goes off before the stock home screen and comes back after it, so its recovery screen never takes over the Home button in between.
 - Apps that saved a Wi-Fi network are never turned off, since Android would erase the network. If the TV's first setup saved yours, the switch asks you to forget the network and connect again in Settings first (saved networks out of range don't show there; Claude Code can remove them).
 
 ## Any TV
@@ -219,11 +221,11 @@ and `logo.png` (a transparent background; one color reads best). `python3 tools/
 
 ## Translations
 
-On Google TV, each language is one file, [`app/assets/i18n/<lang>.json`](app/assets/i18n), keyed by the English text
-in the code. *Automatic* follows the TV's language and uses any language that has a file (English otherwise); *Home
+On Google TV, LG and Samsung, each language is one file, [`app/assets/i18n/<lang>.json`](app/assets/i18n), keyed by the
+English text in the code. *Automatic* follows the TV's language and uses any language that has a file (English otherwise); *Home
 Settings* → *Language* lists them all. Today: English, Portuguese, Spanish, German, French, Italian, Dutch, Polish,
 Swedish, Danish, Norwegian, Finnish, Czech, Romanian, Turkish, Russian, Ukrainian, Greek, Japanese, Korean, Simplified
-Chinese, Hindi, Indonesian and Vietnamese. Portuguese, Spanish, German and Russian were translated by hand and are the
+Chinese, Hindi, Indonesian, Vietnamese and Thai. Portuguese, Spanish, German, Russian and Thai were translated by hand and are the
 reference (fix them by hand); the others were machine-made, and corrections from native speakers are welcome.
 
 - **Add a language:** `python3 tools/translate.py --new ca`, then fill `app/assets/i18n/ca.json` by hand, or with
@@ -237,8 +239,7 @@ reference (fix them by hand); the others were machine-made, and corrections from
   category the language uses (Russian `"one:{n} сезон|few:{n} сезона|many:{n} сезонов|other:{n} сезона"`, Japanese
   just `"other:{n}シーズン"`), and Android's plural rules pick the one for each number.
 - **Limits:** right-to-left languages (Arabic, Hebrew, Persian) would need the layout mirrored, so they aren't there
-  yet. Chinese, Japanese, Korean and Hindi are drawn with the TV's system font (Inter has no such letters). The LG and
-  Samsung app has English, Portuguese, Spanish, German and Russian.
+  yet. Chinese, Japanese, Korean and Hindi are drawn with the TV's system font (Inter has no such letters).
 
 ## Privacy
 

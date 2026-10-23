@@ -157,7 +157,7 @@ final class Speed {
 
     /** What the TV says about its apps, read once for a list (and again before turning off a picked app). */
     static final class Facts {
-        Set<String> all, off, wifi;
+        Set<String> all, off, wifi;     // wifi: null when the Wi-Fi service didn't say who saved its networks
         final Set<String> typing = new HashSet<>(), access = new HashSet<>(), homes = new HashSet<>(),
                 inputs = new HashSet<>(), mine = new HashSet<>(), keptOff = new HashSet<>();
     }
@@ -231,7 +231,7 @@ final class Speed {
             String lower = pkg.toLowerCase(Locale.ROOT);
             for (String w : SYSTEM_WORDS) if (lower.contains(w)) return HIDE;
         }
-        if (f.wifi.contains(pkg)) return WIFI;
+        if (f.wifi != null && f.wifi.contains(pkg)) return WIFI;
         if (f.typing.contains(pkg)) return KEYBOARD;
         if (f.access.contains(pkg)) return ACCESSIBILITY;
         if (pkg.equals(YOUTUBE)) return CAST;
@@ -244,6 +244,11 @@ final class Speed {
         Set<String> out = new HashSet<>();
         if (picks.isEmpty()) return out;
         Facts f = facts(c, adb, state);
+        if (f.wifi == null && !"0".equals(adb.shell("settings get global wifi_on").trim())) {
+            // Nobody can tell who saved the Wi-Fi: the picked apps wait for the next time.
+            AppLog.w("speed: couldn't check which app saved the Wi-Fi, the picked apps stay on for now");
+            return new HashSet<>(picks);
+        }
         for (String pkg : picks) {
             String lock = lock(c, pkg, f);
             if (!lock.isEmpty() && !lock.equals(BEFORE)) out.add(pkg);
