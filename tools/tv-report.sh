@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Reads a Google TV or Android TV over adb and writes a plain-text report to reports/: what's installed and turned off,
-# what runs and how much memory it takes, the home screen, storage, and Free My TV's own numbers. Read-only: it
+# what runs and how much memory it takes, the home screen, storage, and Lumen's own numbers. Read-only: it
 # changes nothing on the TV. Run it before a change and after, then compare the two files.
 #   tools/tv-report.sh <TV IP> [label]        e.g.  tools/tv-report.sh 192.168.1.50 before
 # Left out on purpose: Wi-Fi networks, accounts, serial numbers and logs. The report stays on this computer (reports/
@@ -107,12 +107,12 @@ section "Animations (null = the TV's default, 1)"
 ANIM="$(tv 'for k in window_animation_scale transition_animation_scale animator_duration_scale; do echo "$k=$(settings get global $k)"; done')"
 printf '%s\n' "$ANIM" | add
 
-# --- Free My TV
-section "Free My TV"
-tv 'dumpsys package io.freemytv' | grep -m3 -E 'versionName=|lastUpdateTime=|firstInstallTime=' | sed 's/^ */  /' | add
-tv 'for k in free_my_tv_disabled free_my_tv_animations; do echo "$k=$(settings get global $k)"; done' | add
+# --- Lumen
+section "Lumen"
+tv 'dumpsys package io.lumen.tv' | grep -m3 -E 'versionName=|lastUpdateTime=|firstInstallTime=' | sed 's/^ */  /' | add
+tv 'for k in lumen_disabled lumen_animations; do echo "$k=$(settings get global $k)"; done' | add
 echo "Frames drawn by the home screen and its settings (since the process started):" | add
-GFX="$(tv 'dumpsys gfxinfo io.freemytv:home' | grep -E 'Stats since|Total frames|Janky frames|percentile|Number ')"
+GFX="$(tv 'dumpsys gfxinfo io.lumen.tv:home' | grep -E 'Stats since|Total frames|Janky frames|percentile|Number ')"
 printf '%s\n' "${GFX:-  (not running now)}" | sed 's/^ */  /' | add
 
 # --- Packages
@@ -122,14 +122,14 @@ OFF="$(tv 'pm list packages -d' | sed -n 's/^package://p' | sort)"
 count() { printf '%s\n' "$1" | grep -c .; }
 
 step "Reading how apps are compiled…"
-SHELF="io.freemytv com.netflix.ninja com.google.android.youtube.tv com.amazon.amazonvideo.livingroom
+SHELF="io.lumen.tv com.netflix.ninja com.google.android.youtube.tv com.amazon.amazonvideo.livingroom
   com.disney.disneyplus com.wbd.stream com.hbo.hbonow com.apple.atve.androidtv.appletv com.hulu.livingroomplus
   com.cbs.ott com.peacocktv.peacockandroid com.globo.globotv com.spotify.tv.android"
 DEXOPT="$(tv 'dumpsys package dexopt' | awk '/^  \[/ {pkg = $1; gsub(/[][]/, "", pkg); next}
   /status=/ {s = $0; sub(/^ +/, "", s); print pkg ": " s}')"
 section "How apps are compiled (all packages, by status)"
 printf '%s\n' "$DEXOPT" | sed -n 's/.*status=\([^]]*\)].*/\1/p' | sort | uniq -c | sort -rn | add
-section "How apps are compiled (Free My TV, shelf apps, installed apps)"
+section "How apps are compiled (Lumen, shelf apps, installed apps)"
 for p in $(echo $SHELF) $USER_APPS; do printf '%s\n' "$DEXOPT" | grep "^$p: "; done | awk '!seen[$0]++' | add
 
 step "Reading the TV maker's system apps…"
@@ -152,7 +152,7 @@ mkdir -p reports
 OUT="reports/${model:-tv}-$(date +%Y%m%d-%H%M)${LABEL:+-$LABEL}.txt"
 mb() { printf '%s\n' "$MEM" | awk -v k="$1:" '$1 == k {printf "%d MB", $2 / 1024}'; }
 {
-  echo "Free My TV: TV report, $(date '+%Y-%m-%d %H:%M')${LABEL:+ ($LABEL)}"
+  echo "Lumen: TV report, $(date '+%Y-%m-%d %H:%M')${LABEL:+ ($LABEL)}"
   echo
   echo "== Summary =="
   echo "TV:          $(val ro.product.brand) $(val ro.product.model) ($(val ro.product.device)), Android $(val ro.build.version.release) (SDK $(val ro.build.version.sdk))"

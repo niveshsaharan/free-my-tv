@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://freemytv.io/tizen" version="1.1.0" viewmodes="maximized">
-    <tizen:application id="FreeMyTVio.FreeMyTV" package="FreeMyTVio" required_version="3.0"/>
-    <name>Free My TV</name>
-    <author href="https://freemytv.io">Free My TV</author>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://lumen.home/tizen" version="1.1.0" viewmodes="maximized">
+    <tizen:application id="LumenTVapp.Lumen" package="LumenTVapp" required_version="3.0"/>
+    <name>Lumen</name>
+    <author>Lumen</author>
     <description>A fast, ad-free home screen.</description>
     <content src="index.html"/>
     <icon src="icon.png"/>

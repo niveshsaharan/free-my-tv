@@ -1,17 +1,17 @@
 <div align="center">
 
-<img src="docs/assets/icon-512.png" width="96" alt="">
+<img src="brand/icon.png" width="96" alt="">
 
-# Free My TV
+# Lumen
 
 **A fast, ad-free home screen for Google TV, LG and Samsung TVs.**
 
-Trending picks from your own apps, the weather at a glance, and a look that follows the sunset.<br>
+Trending picks from your own apps, the weather at a glance, and a look that follows the sunset: light by day, dark by night.<br>
 Open source. Built with Claude Code. One button to undo.
 
-[**freemytv.io**](https://freemytv.io) · [Install](#install) · [LG TVs](#lg-tvs-webos) · [Samsung TVs](#samsung-tvs-tizen) · [Any TV](#any-tv) · [Make it yours](#make-it-yours)
+[Install](#install) · [LG TVs](#lg-tvs-webos) · [Samsung TVs](#samsung-tvs-tizen) · [Any TV](#any-tv) · [Make it yours](#make-it-yours)
 
-<img src=".github/preview.webp" width="880" alt="The Free My TV home screen: a glass shelf of apps, trending picks, and a drawer with the weather and crypto prices">
+<img src=".github/preview.webp" width="880" alt="The Lumen home screen: a glass shelf of apps, trending picks, and a drawer with the weather and crypto prices">
 
 </div>
 
@@ -24,22 +24,24 @@ Open source. Built with Claude Code. One button to undo.
 - **Light by day, dark by night.** It follows your city's real sunset, the way your phone does.
 - **A screensaver to match.** Full-screen photos of the picks with a big glass clock.
 - **Fast.** 60 fps, every frame in 16.6 ms, on the TV's own chip. The home screen uses 96 MB of memory instead of 242 MB (−60%).<br><sub>Measured on a 98″ TCL Google TV running Android 14.</sub>
-- **Faster still, if you want.** *Free My TV* → *Speed* turns off the apps you never use, Google Assistant and the TV's slow animations, and has a lighter home screen for smaller TVs (on by itself there).
-- **Set up on the TV.** Language, your city, temperature, theme, the weather and prices cards, which coins, and the apps on the shelf, in Free My TV's own settings.
+- **Faster still, if you want.** *Lumen* → *Speed* turns off the apps you never use, Google Assistant and the TV's slow animations, and has a lighter home screen for smaller TVs (on by itself there).
+- **Set up on the TV.** Language, your city, temperature, theme, the weather and prices cards, which coins, and the apps on the shelf, in Lumen's own settings.
 - **Safe.** No root. Nothing is uninstalled. One button brings back the factory home screen.
 
 ## Install
 
 About ten minutes. You need a Google TV or Android TV (Android 8 or newer) and a computer on the same Wi-Fi.
 
+> **Had Free My TV on this TV?** Lumen used to be called that, and it's a new app now. Switch the old one back first: on the TV, *Free My TV* → *Home Screen* → *Original*. Then remove it with `adb uninstall io.freemytv` (or in the TV's Settings → Apps), and install Lumen as below.
+
 ### The easy way: an AI assistant
 
 1. **On the TV**, turn on developer mode: Settings → System → About → press *Android TV OS build* 7 times. Then Settings → System → Developer options → turn on **USB debugging**. Write down the TV's IP address (Settings → Network & Internet).
-2. **On your computer**, open an AI coding assistant ([Claude Code](https://claude.com/claude-code), Codex or Antigravity) and say:
-   > Install Free My TV (github.com/simbasjungles/free-my-tv) on my TV at 192.168.1.50. I live in Lisbon.
+2. **On your computer**, open this folder in an AI coding assistant ([Claude Code](https://claude.com/claude-code), Codex or Antigravity) and say:
+   > Install Lumen on my TV at 192.168.1.50. I live in Lisbon.
 
-   It downloads the code, installs the tools it needs, builds the app and puts it on your TV, and asks before anything important. Swap in your TV's IP and your city.
-3. **On the TV**, open *Free My TV* → *Home Screen* → *Free My TV*, and accept the debugging prompt (tick *Always allow*).
+   It installs the tools it needs, builds the app and puts it on your TV, and asks before anything important. Swap in your TV's IP and your city.
+3. **On the TV**, open *Lumen* → *Home Screen* → *Lumen*, and accept the debugging prompt (tick *Always allow*).
 
 ### The manual way
 
@@ -52,41 +54,41 @@ About ten minutes. You need a Google TV or Android TV (Android 8 or newer) and a
    On Linux, get OpenJDK 17, Android's command-line tools and adb from your package manager, then run the same `sdkmanager` line. On Windows, use Git Bash (which Claude Code uses there) or WSL.
 3. **Build:**
    ```bash
+   git clone https://github.com/niveshsaharan/free-my-tv lumen && cd lumen
    ./build.sh
    ```
    The first run creates `config.properties`. Set your city and your [TMDB key](#the-tmdb-key) there, then run it again.
 4. **Install:**
    ```bash
    adb connect 192.168.1.50:5555
-   adb install -r FreeMyTV.apk
+   adb install -r Lumen.apk
    ```
    On TCL TVs, also let it run in the background (TCL blocks it by default, and the switch never starts):
    ```bash
-   adb shell "appops set io.freemytv AUTO_START allow || appops set io.freemytv APP_AUTO_START allow"
+   adb shell "appops set io.lumen.tv AUTO_START allow || appops set io.lumen.tv APP_AUTO_START allow"
    ```
-5. **On the TV**, open *Free My TV* → *Home Screen* → *Free My TV*.
+5. **On the TV**, open *Lumen* → *Home Screen* → *Lumen*.
 
 ## LG TVs (webOS)
 
-The same home screen as an LG app: the picks, the glass shelf with your apps, the drawer with inputs, weather and prices, day and night, Home Settings and the shelf editor. It installs through LG's own Developer Mode, with nothing rooted or changed on the TV. LG's home screen stays where it is, and Free My TV is one press of a number key away.
+The same home screen as an LG app: the picks, the glass shelf with your apps, the drawer with inputs, weather and prices, day and night, Home Settings and the shelf editor. It installs through LG's own Developer Mode, with nothing rooted or changed on the TV. LG's home screen stays where it is, and Lumen is one press of a number key away.
 
 You need an LG TV (webOS 3 or newer) and a computer on the same Wi-Fi, with Python 3.
 
 1. **On the TV**, open the LG Content Store and install **Developer Mode**. Sign in with a free [LG developer account](https://webostv.developer.lge.com), turn on **Dev Mode Status** (the TV restarts), then turn on **Key Server**. Write down the IP address and the passphrase it shows.
-2. **On your computer**, get the code and build. `config.properties` works as for Google TV (your city, your [TMDB key](#the-tmdb-key)):
+2. **On your computer**, build it in this folder. `config.properties` works as for Google TV (your city, your [TMDB key](#the-tmdb-key)):
    ```bash
-   git clone https://github.com/simbasjungles/free-my-tv && cd free-my-tv
    python3 webos/build.py
    ```
 3. **Install.** The first time, it asks for the TV's passphrase; updates don't:
    ```bash
    python3 webos/install.py 192.168.1.50
    ```
-4. **On the TV**, while Free My TV is open, hold a number key on the remote. From then on, that key opens it from anywhere.
+4. **On the TV**, while Lumen is open, hold a number key on the remote. From then on, that key opens it from anywhere.
 
-With an AI assistant, say *"Install Free My TV (github.com/simbasjungles/free-my-tv) on my LG TV at 192.168.1.50. I live in Lisbon."* It builds the app and hands you the install command, so you type the passphrase yourself.
+With an AI assistant, open this folder and say *"Install Lumen on my LG TV at 192.168.1.50. I live in Lisbon."* It builds the app and hands you the install command, so you type the passphrase yourself.
 
-Developer Mode lasts about 40 days: open the Developer Mode app now and then and press **EXTEND**. To remove Free My TV, run `python3 webos/install.py 192.168.1.50 --uninstall`.
+Developer Mode lasts about 40 days: open the Developer Mode app now and then and press **EXTEND**. To remove Lumen, run `python3 webos/install.py 192.168.1.50 --uninstall`.
 
 ## Samsung TVs (Tizen)
 
@@ -95,15 +97,13 @@ The same home screen as a Samsung app, with everything the LG one has: the picks
 You need a Samsung TV from 2017 or newer (Tizen 3+) and a computer on the same Wi-Fi.
 
 1. **On the TV**, open **Apps** and type `1 2 3 4 5` on the remote. Turn **Developer mode** on, type your computer's IP address in **Host PC IP**, and restart the TV.
-2. **On your computer**, download [TizenBrew Installer](https://github.com/reisxd/TizenBrewInstaller/releases/latest), the community's installer for Samsung TVs, open it and connect to your TV.
-3. **Install from GitHub:** type `simbasjungles/free-my-tv`. On 2023 and newer TVs it asks you to sign in to your Samsung account once, to sign the app for your TV.
-4. **Straight to it:** in the TV's settings, under Start Screen Options, turn on **Autorun Last App**: the TV turns on into Free My TV.
-
-This build takes your city from the TV's time zone. For your exact city and the trending picks, build it with your own `config.properties` and [TMDB key](#the-tmdb-key): open the folder in Claude Code and say *"Install Free My TV on my Samsung TV at 192.168.1.50. I live in Lisbon."* It sets up Samsung's tools, and on 2023 and newer TVs you sign in to your Samsung account in the browser to make the certificate. Your signed build installs with `python3 tizen/install.py 192.168.1.50`, which needs only Python: no Tizen Studio, and no Rosetta on Apple Silicon Macs.
+2. **On your computer**, open this folder in Claude Code and say *"Install Lumen on my Samsung TV at 192.168.1.50. I live in Lisbon."* It sets up Samsung's signing tool, and on 2023 and newer TVs you sign in to your Samsung account in the browser to make the certificate. It builds and signs the app with your `config.properties` and [TMDB key](#the-tmdb-key) (`python3 tizen/build.py --sign <profile>`).
+3. **Install:** `python3 tizen/install.py 192.168.1.50`. It needs only Python: no Tizen Studio, and no Rosetta on Apple Silicon Macs.
+4. **Straight to it:** in the TV's settings, under Start Screen Options, turn on **Autorun Last App**: the TV turns on into Lumen.
 
 ## Settings
 
-The first values come from `config.properties`, created by the first build (Google TV, LG and Samsung use the same file). Most of them can also be changed on the TV, in *Free My TV* → *Home Settings*, and the TV's choice wins:
+The first values come from `config.properties`, created by the first build (Google TV, LG and Samsung use the same file). Most of them can also be changed on the TV, in *Lumen* → *Home Settings*, and the TV's choice wins:
 
 | Key | What it does | Default |
 |---|---|---|
@@ -120,7 +120,7 @@ The first values come from `config.properties`, created by the first build (Goog
 | `disable_assistant` | Also turn off Google Assistant (on the TV: *Speed* → *Google Assistant*) | `false` |
 | `hide_services` | Streaming services to leave out of the picks even when their app is on the TV (`netflix`, `prime`, `disney`…), comma separated; for apps the TV ships that you don't subscribe to. Google TV only | empty |
 
-Changed something? Run `./build.sh` and install again. Keep `freemytv.keystore`: updates are signed with it.
+Changed something? Run `./build.sh` and install again. Keep `lumen.keystore`: updates are signed with it.
 
 ### The TMDB key
 
@@ -132,9 +132,9 @@ With a free [Watchmode](https://api.watchmode.com/) key (`watchmode_key=` in `co
 
 ## Going back
 
-On the TV: *Free My TV* → *Home Screen* → *Original*. The factory home screen, screensaver, every app and the TV's animations come back exactly as they were. If the new home screen ever crashes three times in five minutes, it switches back by itself.
+On the TV: *Lumen* → *Home Screen* → *Original*. The factory home screen, screensaver, every app and the TV's animations come back exactly as they were. If the new home screen ever crashes three times in five minutes, it switches back by itself.
 
-To remove it for good, switch to *Original* first, then uninstall *Free My TV* (Settings → Apps). Uninstalled it while it was on? Install it again and pick *Original*: the list of what it turned off is kept in the TV's settings, so everything comes back.
+To remove it for good, switch to *Original* first, then uninstall *Lumen* (Settings → Apps). Uninstalled it while it was on? Install it again and pick *Original*: the list of what it turned off is kept in the TV's settings, so everything comes back.
 
 ## What it changes
 
@@ -147,25 +147,25 @@ To remove it for good, switch to *Original* first, then uninstall *Free My TV* (
   - on Multilaser TVs, Anoki's screen-content recognition (ACR), the store demo and the manual;
   - on KTC-made TVs (NextStar), Anoki's screen-content recognition (ACR), the store demo and the manual;
   - Google Assistant, only when you turn it off in *Speed* (or with `disable_assistant=true`);
-  - the apps you pick in *Free My TV* → *Speed* → *Turn off apps*. It offers only apps you can open and the promo apps above, never the TV's own pieces; apps that keep your Wi-Fi, your keyboard, accessibility apps, YouTube (casting from a phone opens it) and apps that were off before stay as they are.
+  - the apps you pick in *Lumen* → *Speed* → *Turn off apps*. It offers only apps you can open and the promo apps above, never the TV's own pieces; apps that keep your Wi-Fi, your keyboard, accessibility apps, YouTube (casting from a phone opens it) and apps that were off before stay as they are.
 - *Speed* → *Animations* makes the TV's own animations twice as fast, or turns them off; *Normal* and *Original* bring back the TV's values.
-- On TCL TVs, the remote's Netflix, YouTube and Prime buttons keep working through a small accessibility service that only reads those buttons. Pick what each one opens in *Free My TV* → *Remote Buttons*; *Original* turns the service off. On Vestel-made TVs (F&U and other store brands) and Xiaomi (Formovie) projectors the same goes for the Netflix button, and on KTC-made TVs (NextStar) for the Tabii button. On Sony TVs, the BRAVIA CORE, Netflix, Disney+, Prime Video, YouTube and Crunchyroll buttons (and Google Play, on remotes that have it) can each open the app you pick, or keep Sony's default.
+- On TCL TVs, the remote's Netflix, YouTube and Prime buttons keep working through a small accessibility service that only reads those buttons. Pick what each one opens in *Lumen* → *Remote Buttons*; *Original* turns the service off. On Vestel-made TVs (F&U and other store brands) and Xiaomi (Formovie) projectors the same goes for the Netflix button, and on KTC-made TVs (NextStar) for the Tabii button. On Sony TVs, the BRAVIA CORE, Netflix, Disney+, Prime Video, YouTube and Crunchyroll buttons (and Google Play, on remotes that have it) can each open the app you pick, or keep Sony's default.
 - Picture, sound, inputs, remote pairing, Google services and the Play Store are on a protected list, checked before every change.
 - Apps that saved a Wi-Fi network are never turned off, since Android would erase the network. If the TV's first setup saved yours, the switch asks you to forget the network and connect again in Settings first (saved networks out of range don't show there; Claude Code can remove them).
 
 ## Any TV
 
-Free My TV runs on Google TV and Android TV: TCL, Sony, Hisense, Philips, Xiaomi, Vestel-made TVs (F&U), KTC-made TVs (NextStar) and more, plus streamers like Chromecast with Google TV, the Google TV Streamer, onn 4K and NVIDIA Shield. And on [LG](#lg-tvs-webos) and [Samsung](#samsung-tvs-tizen) TVs, as an app.
+Lumen runs on Google TV and Android TV: TCL, Sony, Hisense, Philips, Xiaomi, Vestel-made TVs (F&U), KTC-made TVs (NextStar) and more, plus streamers like Chromecast with Google TV, the Google TV Streamer, onn 4K and NVIDIA Shield. And on [LG](#lg-tvs-webos) and [Samsung](#samsung-tvs-tizen) TVs, as an app.
 
 **Any other TV:** plug a Google TV streamer into HDMI and free that one. Same steps, same home screen.
 
-**A different brand or model:** ask Claude. Free My TV is made to be adapted by AI. Open the folder in Claude Code and say *"set it up for my Sony"*: it reads your TV, finds its home screen and its promo apps, updates the lists below and walks you through a test. [CLAUDE.md](CLAUDE.md) tells it how.
+**A different brand or model:** ask Claude. Lumen is made to be adapted by AI. Open the folder in Claude Code and say *"set it up for my Sony"*: it reads your TV, finds its home screen and its promo apps, updates the lists below and walks you through a test. [CLAUDE.md](CLAUDE.md) tells it how.
 
 | What | Where |
 |---|---|
-| Apps to turn off | `DEBLOAT` in [`HomeMode.java`](app/src/io/freemytv/HomeMode.java) |
+| Apps to turn off | `DEBLOAT` in [`HomeMode.java`](app/src/io/lumen/tv/HomeMode.java) |
 | Apps never to touch | `PROTECTED` in the same file |
-| Apps on the shelf | `SHELF` in [`HomeApps.java`](app/src/io/freemytv/HomeApps.java) |
+| Apps on the shelf | `SHELF` in [`HomeApps.java`](app/src/io/lumen/tv/HomeApps.java) |
 | Your brand's live TV app | `LIVE_TV_APPS` in the same file |
 
 ## Make it yours
@@ -177,7 +177,7 @@ It's your code, and Claude Code finds its way around it. Try:
 - *"Add Catalan."*
 - *"Switch to the night look an hour after sunset."*
 
-**Your own name, logo and color.** A `brand/` folder next to `build.sh` holds them, in `brand.properties`:
+**The name, logo and color.** The `brand/` folder holds them, in `brand.properties`:
 
 ```properties
 name=Lumen
@@ -185,7 +185,7 @@ tagline=Light by day, dark by night
 accent=#0A84FF
 ```
 
-and a `logo.png` with a transparent background (one color reads best). `python3 tools/make_art.py --brand` draws the TV's icon and banner from the logo (and a logo, if there is none), then `./build.sh` builds it in. The name replaces "Free My TV" wherever it shows, in every language; the logo shows in the settings, by the home screen's round buttons, on the screensaver and in All Apps; the accent colors the selected tab, what's focused and the settings' "On". The app stays `io.freemytv`, so it installs over Free My TV as an update and keeps your settings. Delete the folder to go back to Free My TV.
+and `logo.png` (a transparent background; one color reads best). `python3 tools/make_art.py` draws the TV's icon and banner from the logo (and the logo, if there is none), then `./build.sh` builds them in. Another name there replaces "Lumen" wherever it shows, in every language; the logo shows in the settings, by the home screen's round buttons, on the screensaver and in All Apps; the accent colors the selected tab, what's focused and the settings' "On". The app's package (`io.lumen.tv`) stays the same, so a new look installs as an update and keeps your settings.
 
 ## How it works
 
@@ -198,26 +198,24 @@ and a `logo.png` with a transparent background (one color reads best). `python3 
 
 | File | What it is |
 |---|---|
-| [`HomeView.java`](app/src/io/freemytv/HomeView.java) | The home screen |
-| [`HomeMode.java`](app/src/io/freemytv/HomeMode.java) | Switching between Free My TV and Original |
-| [`Adb.java`](app/src/io/freemytv/Adb.java) | The TV's own ADB, from inside the TV |
-| [`Recs.java`](app/src/io/freemytv/Recs.java) | The picks (TMDB) |
-| [`HomeData.java`](app/src/io/freemytv/HomeData.java) | Weather and prices |
-| [`HomeApps.java`](app/src/io/freemytv/HomeApps.java) | The shelf, inputs and All Apps |
-| [`DreamView.java`](app/src/io/freemytv/DreamView.java) | The screensaver |
-| [`SettingsActivity.java`](app/src/io/freemytv/SettingsActivity.java) | The settings screen (the app's icon) |
-| [`Prefs.java`](app/src/io/freemytv/Prefs.java) | Settings changed on the TV |
-| [`Speed.java`](app/src/io/freemytv/Speed.java) | The Speed screen's choices and the apps it offers |
-| [`Brand.java`](app/src/io/freemytv/Brand.java) | Your name, accent and logo, from `brand/` |
-| [`RemoteKeys.java`](app/src/io/freemytv/RemoteKeys.java) | The TCL remote's app buttons |
-| [`Watchdog.java`](app/src/io/freemytv/Watchdog.java) | The safety net |
+| [`HomeView.java`](app/src/io/lumen/tv/HomeView.java) | The home screen |
+| [`HomeMode.java`](app/src/io/lumen/tv/HomeMode.java) | Switching between Lumen and Original |
+| [`Adb.java`](app/src/io/lumen/tv/Adb.java) | The TV's own ADB, from inside the TV |
+| [`Recs.java`](app/src/io/lumen/tv/Recs.java) | The picks (TMDB) |
+| [`HomeData.java`](app/src/io/lumen/tv/HomeData.java) | Weather and prices |
+| [`HomeApps.java`](app/src/io/lumen/tv/HomeApps.java) | The shelf, inputs and All Apps |
+| [`DreamView.java`](app/src/io/lumen/tv/DreamView.java) | The screensaver |
+| [`SettingsActivity.java`](app/src/io/lumen/tv/SettingsActivity.java) | The settings screen (the app's icon) |
+| [`Prefs.java`](app/src/io/lumen/tv/Prefs.java) | Settings changed on the TV |
+| [`Speed.java`](app/src/io/lumen/tv/Speed.java) | The Speed screen's choices and the apps it offers |
+| [`Brand.java`](app/src/io/lumen/tv/Brand.java) | The name, accent and logo, from `brand/` |
+| [`RemoteKeys.java`](app/src/io/lumen/tv/RemoteKeys.java) | The TCL remote's app buttons |
+| [`Watchdog.java`](app/src/io/lumen/tv/Watchdog.java) | The safety net |
 | [`web/home.js`](web/home.js) | The home screen on LG TVs |
 | [`web/tv.js`](web/tv.js) | The TV's apps and inputs, on LG and Samsung |
 | [`webos/build.py`](webos/build.py), [`webos/install.py`](webos/install.py) | The LG app package and its install |
-| [`tizen/build.py`](tizen/build.py) | The Samsung app package |
+| [`tizen/build.py`](tizen/build.py), [`tizen/install.py`](tizen/install.py) | The Samsung app package and its install |
 | [`tools/tv-report.sh`](tools/tv-report.sh) | A read-only report of a Google TV (apps, memory, storage, home screen), to compare before and after a change |
-
-The website ([freemytv.io](https://freemytv.io)) is in [`docs/`](docs): plain HTML, CSS and JS on GitHub Pages.
 
 ## Translations
 
@@ -250,7 +248,7 @@ No accounts, no analytics, no tracking. The app talks to TMDB, Open-Meteo (with 
 
 - Built with [Claude Code](https://claude.com/claude-code).
 - The LG version builds on what [@danielthejoker18](https://github.com/danielthejoker18) found in [FreeMyTvWebOS](https://github.com/danielthejoker18/FreeMyTvWebOS) (MIT): installing through Developer Mode and opening apps through the TV's service bus.
-- On Samsung TVs it installs with [TizenBrew Installer](https://github.com/reisxd/TizenBrewInstaller) by [@reisxd](https://github.com/reisxd).
+- The Samsung install speaks the same commands as [TizenBrew Installer](https://github.com/reisxd/TizenBrewInstaller) by [@reisxd](https://github.com/reisxd).
 - This product uses the TMDB API but is not endorsed or certified by [TMDB](https://www.themoviedb.org/).
 - Links to the titles in the streaming apps by [Watchmode](https://api.watchmode.com/).
 - Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0). Prices from the [Binance](https://www.binance.com/) public API.

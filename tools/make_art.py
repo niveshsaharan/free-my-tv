@@ -1,77 +1,19 @@
-"""Draws the app icon, the TV banner and the site's images (Pillow).
+"""Draws the app's icon and TV banner from brand/ (Pillow). Usage: python3 tools/make_art.py
 
-    python3 tools/make_art.py            # Free My TV's own icon, banner and site images
-    python3 tools/make_art.py --brand    # your brand's icon and banner, from brand/brand.properties and brand/logo.png
-                                         # (drawn too when there is none: a day/night disc in the accent color)
+Reads the name and the accent from brand/brand.properties and the logo from brand/logo.png (a transparent PNG; one
+color reads best). Without a logo it draws Lumen's: a disc, its left half filled and its right half a ring (day and
+night), in the accent. Writes brand/icon.png and brand/banner.png, which build.sh puts in the app, the same two
+into app/res/drawable-nodpi (what a build without brand/ shows), and the LG and Samsung icons (webos/, tizen/).
 """
-import math
 import os
-import sys
+import shutil
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT = os.path.join(ROOT, "app/assets/fonts/InterVariable.ttf")
-STOPS = [(0.0, (255, 194, 122)), (0.5, (255, 122, 158)), (1.0, (154, 140, 255))]   # sunrise -> pink -> dusk
-
-
-def gradient(w, h, angle=35):
-    """Diagonal three-color gradient."""
-    img = Image.new("RGB", (w, h))
-    px = img.load()
-    a = math.radians(angle)
-    dx, dy = math.cos(a), math.sin(a)
-    lo = min(0, w * dx, h * dy, w * dx + h * dy)
-    hi = max(0, w * dx, h * dy, w * dx + h * dy)
-    for y in range(h):
-        for x in range(w):
-            t = ((x * dx + y * dy) - lo) / (hi - lo)
-            for i in range(len(STOPS) - 1):
-                t0, c0 = STOPS[i]
-                t1, c1 = STOPS[i + 1]
-                if t <= t1:
-                    f = (t - t0) / (t1 - t0)
-                    px[x, y] = tuple(round(c0[k] + (c1[k] - c0[k]) * f) for k in range(3))
-                    break
-    return img
-
-
-def sparkle(draw, cx, cy, r, fill):
-    """Four-point star."""
-    pts = []
-    for i in range(8):
-        ang = math.pi / 2 * (i // 2) + (0 if i % 2 == 0 else math.pi / 4)
-        rad = r if i % 2 == 0 else r * 0.26
-        pts.append((cx + rad * math.cos(ang - math.pi / 2), cy + rad * math.sin(ang - math.pi / 2)))
-    draw.polygon(pts, fill=fill)
-
-
-def mark(size, bg=True):
-    """The mark: a TV with a sparkle, on the gradient squircle (bg) or alone (white)."""
-    s = size * 4
-    img = gradient(s, s).convert("RGBA") if bg else Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    if bg:
-        mask = Image.new("L", (s, s), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, s - 1, s - 1), radius=int(s * 0.23), fill=255)
-        img.putalpha(mask)
-    layer = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
-    white = (255, 255, 255, 255)
-    # screen
-    x0, y0, x1, y1 = s * 0.2, s * 0.27, s * 0.8, s * 0.66
-    d.rounded_rectangle((x0, y0, x1, y1), radius=int(s * 0.07), outline=white, width=int(s * 0.055))
-    # stand
-    d.rounded_rectangle((s * 0.36, s * 0.715, s * 0.64, s * 0.765), radius=int(s * 0.025), fill=white)
-    # sparkle inside the screen
-    sparkle(d, s * 0.5, s * 0.465, s * 0.12, white)
-    sparkle(d, s * 0.655, s * 0.355, s * 0.045, white)
-    if bg:
-        shadow = layer.copy().filter(ImageFilter.GaussianBlur(s * 0.02))
-        tint = Image.new("RGBA", (s, s), (120, 40, 80, 0))
-        tint.putalpha(shadow.getchannel("A").point(lambda v: int(v * 0.22)))
-        img.alpha_composite(tint, (0, int(s * 0.012)))
-    img.alpha_composite(layer)
-    return img.resize((size, size), Image.LANCZOS)
+BRAND = os.path.join(ROOT, "brand")
+RES = os.path.join(ROOT, "app/res/drawable-nodpi")
 
 
 def font(px, weight=600):
@@ -88,31 +30,12 @@ def font(px, weight=600):
     return f
 
 
-def banner(w=640, h=360):
-    s = 4
-    img = gradient(w * s, h * s, angle=20).convert("RGBA")
-    m = mark(int(h * 0.5 * s), bg=False)
-    d = ImageDraw.Draw(img)
-    f = font(int(h * 0.15 * s), 650)
-    text = "Free My TV"
-    box = d.textbbox((0, 0), text, font=f)
-    gap = int(w * 0.02 * s)
-    total = m.width + gap + (box[2] - box[0])
-    x = (w * s - total) // 2
-    img.alpha_composite(m, (x, int((h * s - m.height) / 2)))
-    y = (h * s - (box[3] - box[1])) // 2 - box[1]
-    d.text((x + m.width + gap - box[0], y), text, font=f, fill=(255, 255, 255, 255))
-    return img.resize((w, h), Image.LANCZOS)
-
-
-# MARK: - Your brand (brand/, read by build.sh)
-
-BRAND = os.path.join(ROOT, "brand")
-
-
 def brand_props():
     props = {}
-    with open(os.path.join(BRAND, "brand.properties"), encoding="utf-8") as f:
+    path = os.path.join(BRAND, "brand.properties")
+    if not os.path.exists(path):
+        return props
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
@@ -142,7 +65,7 @@ def shaded(w, h, color):
 
 
 def day_night(size, color):
-    """The generated logo: a disc, its left half filled and its right half a ring (day and night)."""
+    """Lumen's logo: a disc, its left half filled and its right half a ring (day and night)."""
     s = size * 4
     c, r = s / 2, s * 0.4
     inner = r - s * 0.075
@@ -164,7 +87,7 @@ def silhouette(logo, size, color):
     return out
 
 
-def brand_icon(logo, accent, size=192):
+def icon(logo, accent, size=192):
     s = size * 4
     img = shaded(s, s, accent).convert("RGBA")
     mask = Image.new("L", (s, s), 0)
@@ -175,7 +98,7 @@ def brand_icon(logo, accent, size=192):
     return img.resize((size, size), Image.LANCZOS)
 
 
-def brand_banner(logo, name, accent, w=640, h=360):
+def banner(logo, name, accent, w=640, h=360):
     s = 4
     img = shaded(w * s, h * s, accent).convert("RGBA")
     m = silhouette(logo, int(h * 0.36 * s), (255, 255, 255))
@@ -195,30 +118,21 @@ def brand_banner(logo, name, accent, w=640, h=360):
     return img.resize((w, h), Image.LANCZOS)
 
 
-def make_brand():
+if __name__ == "__main__":
     props = brand_props()
-    name = props.get("name", "").strip() or "Free My TV"
-    accent = rgb(props.get("accent", "#0A84FF"))
+    name = props.get("name", "").strip() or "Lumen"
+    accent = rgb(props.get("accent", "").strip() or "#0A84FF")
+    os.makedirs(BRAND, exist_ok=True)
     logo_path = os.path.join(BRAND, "logo.png")
     if not os.path.exists(logo_path):
         day_night(512, accent).save(logo_path)
         print("drew brand/logo.png")
     logo = Image.open(logo_path).convert("RGBA")
-    brand_icon(logo, accent).save(os.path.join(BRAND, "icon.png"))
-    brand_banner(logo, name, accent).save(os.path.join(BRAND, "banner.png"))
-    print("brand: " + name + " (icon.png, banner.png)")
-
-
-if __name__ == "__main__" and "--brand" in sys.argv[1:]:
-    make_brand()
-elif __name__ == "__main__":
-    res = os.path.join(ROOT, "app/res/drawable-nodpi")
-    os.makedirs(res, exist_ok=True)
-    mark(192).save(os.path.join(res, "icon.png"))
-    banner().save(os.path.join(res, "banner.png"))
-    site = os.path.join(ROOT, "docs/assets")
-    os.makedirs(site, exist_ok=True)
-    mark(512).save(os.path.join(site, "icon-512.png"))
-    mark(180).save(os.path.join(site, "apple-touch-icon.png"))
-    mark(64).save(os.path.join(site, "favicon-64.png"))
-    print("ok")
+    icon(logo, accent).save(os.path.join(BRAND, "icon.png"))
+    banner(logo, name, accent).save(os.path.join(BRAND, "banner.png"))
+    os.makedirs(RES, exist_ok=True)
+    for image in ("icon.png", "banner.png"):
+        shutil.copyfile(os.path.join(BRAND, image), os.path.join(RES, image))
+    for path, size in (("webos/icon.png", 80), ("webos/largeIcon.png", 130), ("tizen/icon.png", 512)):
+        icon(logo, accent, size).save(os.path.join(ROOT, path))
+    print(name + ": brand/icon.png and brand/banner.png (also in app/res/drawable-nodpi), and the LG and Samsung icons")
