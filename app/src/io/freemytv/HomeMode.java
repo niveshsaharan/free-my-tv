@@ -1,6 +1,7 @@
 package io.freemytv;
 
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.SystemClock;
 
@@ -15,6 +16,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -136,6 +138,14 @@ final class HomeMode {
         "com.fengmi.testsuite", "android.autoinstalls.config.fomovie",
         "uk.co.freeview.tifbridge",
         "uk.co.freeview.mdsclient", "uk.co.freeview.fvpconfigauth"));
+
+    static boolean isProtected(String pkg) {
+        return PROTECTED.contains(pkg);
+    }
+
+    static boolean isDebloat(String pkg) {
+        return Arrays.asList(DEBLOAT).contains(pkg);
+    }
 
     /** One switch at a time (jobs can overlap: a boot check and a button press). */
     private static final Object RUN = new Object();
@@ -263,25 +273,31 @@ final class HomeMode {
             JSONObject started = state(c);
             started.put("mode", FREE).put("homeReverted", false).put("setupHome", setupHome);
             save(c, started);
-            List<String> targets = targets(home, dream, setupHome);
+            JSONObject choices = Speed.choices(c);
+            List<String> targets = targets(choices, home, dream, setupHome);
             Set<String> disabled = new HashSet<>(stringList(state(c), "disabled"));
-            Set<String> present = packages(adb, "");
+            Set<String> present = packages(adb, ""), disabledNow = packages(adb, "-d");
             Set<String> keptOff = new HashSet<>(stringList(state(c), "keptOff"));
             // Off now and not on our list: the person turned it off, unless an earlier install of Free My TV did (its
             // list lives in the TV's settings too, since an uninstall erases our state file).
             Set<String> ours = recorded(adb);
-            for (String pkg : packages(adb, "-d")) {
-                if (targets(home, dream, true).contains(pkg) && !disabled.contains(pkg) && !ours.contains(pkg)) keptOff.add(pkg);
+            List<String> any = targets(choices, home, dream, true);
+            for (String pkg : disabledNow) {
+                if (any.contains(pkg) && !disabled.contains(pkg) && !ours.contains(pkg)) keptOff.add(pkg);
             }
             keptOff.removeAll(ours);
+            // What an earlier install turned off and is still off stays ours: Original turns it back on.
+            for (String pkg : ours) if (disabledNow.contains(pkg)) disabled.add(pkg);
             JSONObject before = state(c);
             before.put("keptOff", new JSONArray(sorted(keptOff)));
             save(c, before);
+            Set<String> blocked = Speed.blocked(c, adb, state(c), picks(choices, core(home, dream, setupHome)));
             int done = 0;
             for (String pkg : targets) {
                 done++;
                 busy(c, Ui.trf("Turning off apps ({done}/{total})…", "done", done, "total", targets.size()));
-                if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg) || keptOff.contains(pkg)) continue;
+                if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg) || keptOff.contains(pkg)
+                        || blocked.contains(pkg)) continue;
                 String out = adb.shell("pm disable-user --user 0 " + pkg);
                 if (out.contains("disabled-user")) {
                     disabled.add(pkg);
@@ -297,6 +313,12 @@ final class HomeMode {
             s.put("mode", FREE).put("since", System.currentTimeMillis()).put("homeReverted", false)
                     .put("disabled", new JSONArray(sorted(disabled))).put("setupHome", setupHome);
             save(c, s);
+            // The Speed screen's other choices: apps turned back on there, and the animations.
+            try {
+                reconcile(c, adb, state(c), new ArrayList<>());
+            } catch (IOException e) {
+                AppLog.w("speed choices: " + e.getMessage());
+            }
             if (RemoteKeys.supported()) {
                 try {
                     remoteService(c, adb, true);
@@ -304,7 +326,8 @@ final class HomeMode {
                     AppLog.w("remote buttons service: " + e.getMessage());
                 }
             }
-            notice(c, Ui.trf("Free My TV is on: new home screen and screensaver, {n} apps turned off.", "n", disabled.size()));
+            notice(c, Ui.trf("Free My TV is on: new home screen and screensaver, {n} apps turned off.", "n",
+                    stringList(state(c), "disabled").size()));
             busy(c, Ui.tr("Measuring Free My TV…"));
             measureHomeTime(c, adb, FREE);
             done(c, null);
@@ -320,10 +343,12 @@ final class HomeMode {
         try (Adb adb = connect(c, s)) {
             busy(c, Ui.tr("Turning the apps back on…"));
             String home = originalHome(s);
+            // No switch yet in this install (it was installed again): only what the earlier one recorded comes back.
+            boolean fresh = !s.has("since");
             Set<String> toEnable = new HashSet<>(stringList(s, "disabled"));
-            for (String pkg : targets(home, originalDream(s), true)) {
-                if (!Arrays.asList(DEBLOAT).contains(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)) toEnable.add(pkg);
-            }
+            if (!fresh) toEnable.addAll(core(home, originalDream(s), true));
+            // And what an earlier install turned off: its list lives in the TV's settings (an uninstall erases ours).
+            toEnable.addAll(recorded(adb));
             toEnable.removeAll(stringList(s, "keptOff"));
             Set<String> present = packages(adb, "");
             int done = 0;
@@ -338,8 +363,18 @@ final class HomeMode {
             }
             record(adb, new HashSet<>(failed));
             busy(c, Ui.tr("Restoring the original home screen…"));
-            boolean homeOk = restoreHome(adb, home);
-            restoreScreensaver(adb, s);
+            // A new install: a launcher the person installed since stays, and the screensaver goes back only if it's ours.
+            String holder = homeHolder(adb);
+            boolean theirs = fresh && !holder.isEmpty() && !holder.contains(PKG) && packages(adb, "-3").contains(holder);
+            boolean homeOk = theirs || restoreHome(adb, home);
+            if (!fresh || adb.shell("settings get secure screensaver_components").contains(PKG + "/")) restoreScreensaver(adb, s);
+            boolean animationsOk = true;
+            try {
+                animations(c, adb, Speed.NORMAL);
+            } catch (IOException e) {
+                animationsOk = false;
+                AppLog.w("animations: " + e.getMessage());
+            }
             try {
                 remoteService(c, adb, false);
             } catch (IOException e) {
@@ -349,11 +384,12 @@ final class HomeMode {
             s.put("mode", ORIGINAL).put("since", System.currentTimeMillis()).put("homeReverted", false)
                     .put("disabled", new JSONArray(failed)).remove("keptOff");
             save(c, s);
-            if (failed.isEmpty() && homeOk) {
+            if (failed.isEmpty() && homeOk && animationsOk) {
                 notice(c, Ui.tr("Original mode: the factory home screen, screensaver and apps are back."));
             } else {
                 List<String> problems = new ArrayList<>(failed);
                 if (!homeOk) problems.add(Ui.tr("the original home screen"));
+                if (!animationsOk) problems.add(Ui.tr("the animations"));
                 notice(c, Ui.trf("Original mode, but I couldn't turn back on: {list}.", "list", String.join(", ", problems)));
             }
             busy(c, Ui.tr("Measuring the original home screen…"));
@@ -462,35 +498,10 @@ final class HomeMode {
                 save(app, s);
             } catch (JSONException ignored) {}
             if (!FREE.equals(s.optString("mode"))) return;
-            List<String> fixed = new ArrayList<>();
+            List<String> fixed = new ArrayList<>(), failed;
             try (Adb adb = Adb.connect(app, 10_000, null)) {
-                Set<String> present = packages(adb, "");
-                Set<String> disabledNow = packages(adb, "-d");
-                Set<String> owners = wifiOwners(adb);
                 boolean reverted = s.optBoolean("homeReverted");
-                String home = originalHome(s);
-                Set<String> wanted = new HashSet<>(stringList(s, "disabled"));
-                String dream = originalDream(s);
-                for (String pkg : targets(home, dream, s.optBoolean("setupHome", true))) {
-                    if (!reverted || !(pkg.equals(packageOf(home)) || pkg.equals(GOOGLE_SETUP) || pkg.equals(packageOf(dream)))) {
-                        wanted.add(pkg);
-                    }
-                }
-                Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
-                // Off before Free My TV: turned off again if a TV update brings one back, but never handed to
-                // Original to turn on.
-                List<String> keptOff = stringList(s, "keptOff");
-                for (String pkg : sorted(wanted)) {
-                    if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg)) continue;
-                    if (disabledNow.contains(pkg)) {
-                        if (!keptOff.contains(pkg)) disabled.add(pkg);
-                        continue;
-                    }
-                    if (adb.shell("pm disable-user --user 0 " + pkg).contains("disabled-user")) {
-                        if (!keptOff.contains(pkg)) disabled.add(pkg);
-                        fixed.add(pkg);
-                    }
-                }
+                failed = reconcile(app, adb, s, fixed);
                 if (!reverted && !homeHolder(adb).contains(PKG)) {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
                     fixed.add(Ui.tr("the home screen"));
@@ -500,10 +511,6 @@ final class HomeMode {
                     adb.shell("settings put secure screensaver_components " + DREAM);
                     fixed.add(Ui.tr("the screensaver"));
                 }
-                record(adb, disabled);
-                JSONObject latest = state(app);
-                latest.put("disabled", new JSONArray(sorted(disabled)));
-                save(app, latest);
             } catch (Exception e) {
                 notice(app, Ui.trf("Couldn't check Free My TV: {error}", "error", e.getMessage()));
                 return;
@@ -514,14 +521,171 @@ final class HomeMode {
             } else if (updated) {
                 notice(app, Ui.tr("The TV was updated; Free My TV is still on."));
             }
+            if (!failed.isEmpty()) notice(app, Ui.trf("Couldn't turn back on: {list}.", "list", names(app, failed)));
+        }
+        compileSelf(app);
+    }
+
+    /**
+     * Free My TV mode as it should be now: the lists' apps and the ones picked on the Speed screen off, the ones the person
+     * turned back on there on again (only those we turned off), and the animations they chose. Adds to `fixed` what had
+     * to be turned off again (a TV update can turn apps back on); returns what didn't come back on.
+     */
+    private static List<String> reconcile(Context c, Adb adb, JSONObject s, List<String> fixed) throws IOException, JSONException {
+        JSONObject choices = Speed.choices(c);
+        Set<String> present = packages(adb, ""), disabledNow = packages(adb, "-d"), owners = wifiOwners(adb);
+        boolean reverted = s.optBoolean("homeReverted");
+        String home = originalHome(s), dream = originalDream(s);
+        boolean setupHome = s.optBoolean("setupHome", true);
+        List<String> core = core(home, dream, setupHome);
+        Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
+        // Turned back on in Speed (the Assistant too, when it's on there); never the mode's own.
+        Set<String> released = Speed.apps(choices, Speed.ON);
+        if (!Speed.assistantOff(choices)) released.addAll(Arrays.asList(ASSISTANT));
+        released.removeAll(core);
+        Set<String> wanted = new HashSet<>(disabled);
+        for (String pkg : targets(choices, home, dream, setupHome)) {
+            if (!reverted || !(pkg.equals(packageOf(home)) || pkg.equals(GOOGLE_SETUP) || pkg.equals(packageOf(dream)))) {
+                wanted.add(pkg);
+            }
+        }
+        wanted.removeAll(released);
+        Set<String> blocked = Speed.blocked(c, adb, s, picks(choices, core));
+        // Off before Free My TV: turned off again if a TV update brings one back, but never handed to Original to turn on.
+        List<String> keptOff = stringList(s, "keptOff");
+        for (String pkg : sorted(wanted)) {
+            if (PROTECTED.contains(pkg) || !present.contains(pkg) || owners.contains(pkg) || blocked.contains(pkg)) continue;
+            if (disabledNow.contains(pkg)) {
+                if (!keptOff.contains(pkg)) disabled.add(pkg);
+                continue;
+            }
+            if (adb.shell("pm disable-user --user 0 " + pkg).contains("disabled-user")) {
+                if (!keptOff.contains(pkg)) disabled.add(pkg);
+                fixed.add(pkg);
+            }
+        }
+        List<String> failed = new ArrayList<>();
+        for (String pkg : sorted(released)) {
+            if (!disabled.contains(pkg)) continue;      // only what we turned off comes back from here
+            if (!present.contains(pkg) || adb.shell("pm enable " + pkg).contains("new state: enabled")) disabled.remove(pkg);
+            else failed.add(pkg);
+        }
+        record(adb, disabled);
+        JSONObject latest = state(c);
+        latest.put("disabled", new JSONArray(sorted(disabled)));
+        save(c, latest);
+        animations(c, adb, Speed.animations(choices));
+        return failed;
+    }
+
+    /** The apps picked off on the Speed screen, other than the lists' and the mode's own: checked again before. */
+    private static Set<String> picks(JSONObject choices, List<String> core) {
+        Set<String> out = Speed.apps(choices, Speed.OFF);
+        out.removeAll(Arrays.asList(DEBLOAT));
+        out.removeAll(core);
+        return out;
+    }
+
+    /** The Speed screen's choices changed (ModeJob.SPEED): applied now in Free My TV mode; Original keeps them for later. */
+    static void speedNow(Context app) {
+        synchronized (RUN) {
+            JSONObject s = state(app);
+            if (!FREE.equals(s.optString("mode"))) return;
+            try (Adb adb = connect(app, s)) {
+                busy(app, Ui.tr("Applying your choices…"));
+                List<String> failed = reconcile(app, adb, s, new ArrayList<>());
+                Speed.scan(app, adb, state(app));
+                done(app, null);
+                if (!failed.isEmpty()) notice(app, Ui.trf("Couldn't turn back on: {list}.", "list", names(app, failed)));
+                ModeJob.schedule(app, ModeJob.MEMORY, FREE, 120_000);
+            } catch (Exception e) {
+                done(app, Ui.trf("Couldn't apply the Speed choices: {error}", "error", e.getMessage()));
+            }
+        }
+    }
+
+    /** App names for a notice (the package where there's none). */
+    private static String names(Context c, Collection<String> pkgs) {
+        List<String> out = new ArrayList<>();
+        PackageManager pm = c.getPackageManager();
+        for (String pkg : sorted(new HashSet<>(pkgs))) {
+            try {
+                out.add(String.valueOf(pm.getApplicationInfo(pkg, 0).loadLabel(pm)));
+            } catch (PackageManager.NameNotFoundException e) {
+                out.add(pkg);
+            }
+        }
+        return String.join(", ", out);
+    }
+
+    // The TV's animation scales before Free My TV changed them, kept in its settings (an uninstall erases our state).
+    private static final String ANIMATIONS = "free_my_tv_animations";
+    private static final String[] SCALES = {"window_animation_scale", "transition_animation_scale", "animator_duration_scale"};
+    private static final Pattern SCALE = Pattern.compile("null|\\d*\\.?\\d+");
+
+    /** Sets the TV's animation scales for a Speed choice (Speed.NORMAL: the TV's own again). True if anything changed. */
+    static boolean animations(Context c, Adb adb, String choice) throws IOException {
+        String[] kept = adb.shell("settings get global " + ANIMATIONS).trim().split(",");
+        boolean recorded = kept.length == SCALES.length;
+        for (String v : kept) recorded &= SCALE.matcher(v).matches();
+        if (Speed.NORMAL.equals(choice)) {
+            if (!recorded) return false;
+            for (int i = 0; i < SCALES.length; i++) {
+                adb.shell(kept[i].equals("null") ? "settings delete global " + SCALES[i]
+                        : "settings put global " + SCALES[i] + " " + kept[i]);
+            }
+            adb.shell("settings delete global " + ANIMATIONS);
+            AppLog.w("animations: the TV's own again");
+            return true;
+        }
+        String target = Speed.OFF.equals(choice) ? "0" : "0.5";
+        String[] now = new String[SCALES.length];
+        boolean same = true;
+        for (int i = 0; i < SCALES.length; i++) {
+            now[i] = adb.shell("settings get global " + SCALES[i]).trim();
+            if (!SCALE.matcher(now[i]).matches()) now[i] = "null";
+            same &= now[i].equals(target);
+        }
+        if (same) return false;
+        // Recorded first: if this stops halfway, Original still knows what to bring back.
+        if (!recorded) adb.shell("settings put global " + ANIMATIONS + " " + String.join(",", now));
+        for (String key : SCALES) adb.shell("settings put global " + key + " " + target);
+        AppLog.w("animations: " + choice);
+        return true;
+    }
+
+    /**
+     * After an update of this app, in Free My TV mode: compiled ahead of time (`speed`), so the home screen starts and
+     * runs without waiting for the JIT on a slow CPU. Once per version, outside the RUN lock (it takes a while).
+     */
+    private static void compileSelf(Context app) {
+        long built;
+        try {
+            built = app.getPackageManager().getPackageInfo(PKG, 0).lastUpdateTime;
+        } catch (PackageManager.NameNotFoundException e) {
+            return;
+        }
+        synchronized (RUN) {
+            JSONObject s = state(app);
+            if (!FREE.equals(s.optString("mode")) || s.optLong("compiledFor") == built) return;
+            // Saved first: a compile that stops us halfway isn't tried again and again.
+            try { s.put("compiledFor", built); } catch (JSONException ignored) {}
+            save(app, s);
+        }
+        try (Adb adb = Adb.connect(app, 10_000, null)) {
+            long start = SystemClock.elapsedRealtime();
+            String out = adb.shell("cmd package compile -m speed -f " + PKG, 300_000).trim();
+            AppLog.w("compiled ahead of time: " + out + " (" + (SystemClock.elapsedRealtime() - start) / 1000 + " s)");
+        } catch (IOException e) {
+            AppLog.w("couldn't compile ahead of time: " + e.getMessage());
         }
     }
 
     /**
-     * What to turn off: the TV's own home screen and screensaver, Google TV's recovery home (when setupHome: the setup
-     * app is one of the TV's home screens), and the lists above.
+     * The mode's own: the TV's own home screen (and its recommendations service) and screensaver, and Google TV's
+     * recovery home (when setupHome: the setup app is one of the TV's home screens). Original always turns these on.
      */
-    private static List<String> targets(String home, String dream, boolean setupHome) {
+    private static List<String> core(String home, String dream, boolean setupHome) {
         List<String> out = new ArrayList<>();
         String homePkg = packageOf(home);
         if (homePkg != null && !homePkg.equals(PKG)) out.add(homePkg);
@@ -529,8 +693,24 @@ final class HomeMode {
         if (setupHome) out.add(GOOGLE_SETUP);
         String dreamPkg = packageOf(dream);
         if (dreamPkg != null && !dreamPkg.equals(PKG) && !dreamPkg.equals(homePkg)) out.add(dreamPkg);
-        out.addAll(Arrays.asList(DEBLOAT));
-        if (Config.DISABLE_ASSISTANT) out.addAll(Arrays.asList(ASSISTANT));
+        return out;
+    }
+
+    /** core() for the originals recorded in a state. */
+    static List<String> core(JSONObject s) {
+        return core(originalHome(s), originalDream(s), s.optBoolean("setupHome", true));
+    }
+
+    /**
+     * What to turn off: core(), the lists above (minus what the person turned back on in Speed), the Assistant when it's
+     * off, and the apps picked on the Speed screen.
+     */
+    private static List<String> targets(JSONObject choices, String home, String dream, boolean setupHome) {
+        List<String> out = core(home, dream, setupHome);
+        Set<String> on = Speed.apps(choices, Speed.ON);
+        for (String pkg : DEBLOAT) if (!on.contains(pkg)) out.add(pkg);
+        if (Speed.assistantOff(choices)) out.addAll(Arrays.asList(ASSISTANT));
+        for (String pkg : sorted(Speed.apps(choices, Speed.OFF))) if (!out.contains(pkg)) out.add(pkg);
         return out;
     }
 
@@ -568,7 +748,7 @@ final class HomeMode {
     }
 
     /** Apps that saved a Wi-Fi network ("cname" in the Wi-Fi service's list of saved networks). */
-    private static Set<String> wifiOwners(Adb adb) throws IOException {
+    static Set<String> wifiOwners(Adb adb) throws IOException {
         Set<String> owners = new HashSet<>();
         Matcher m = Pattern.compile("cname=([\\w.]+)").matcher(adb.shell("dumpsys wifi | grep -o 'cname=[^ ]*'"));
         while (m.find()) owners.add(m.group(1));
@@ -625,7 +805,7 @@ final class HomeMode {
     }
 
     /** Packages the shell sees (all; "-d" = only the disabled ones). The app alone can't see the ones it doesn't declare. */
-    private static Set<String> packages(Adb adb, String flags) throws IOException {
+    static Set<String> packages(Adb adb, String flags) throws IOException {
         Set<String> out = new HashSet<>();
         for (String line : adb.shell("pm list packages " + flags).split("\n")) {
             line = line.trim();

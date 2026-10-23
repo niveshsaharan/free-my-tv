@@ -119,6 +119,15 @@ final class Adb implements Closeable {
 
     /** Runs a command in the TV's shell and returns its output (stdout and stderr together). */
     String shell(String command) throws IOException {
+        return shell(command, 20_000);
+    }
+
+    /**
+     * The same, waiting up to `timeoutMs` for each piece of output: for a command that stays silent longer (compiling
+     * an app). After a timeout the connection is out of step: close it.
+     */
+    String shell(String command, int timeoutMs) throws IOException {
+        socket.setSoTimeout(timeoutMs);
         int local = nextLocalId++;
         send(OPEN, local, 0, ("shell:" + command + "\0").getBytes(StandardCharsets.UTF_8));
         int remote = 0;

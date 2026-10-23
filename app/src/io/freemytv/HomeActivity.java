@@ -58,7 +58,7 @@ public class HomeActivity extends Activity {
     /** Home button pressed on the home screen: back to the entry state (focus on the first app, sheet closed). */
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (home != null) home.reset(true);
+        if (home != null) home.reset(!Lighter.on());
     }
 
     @Override protected void onDestroy() {

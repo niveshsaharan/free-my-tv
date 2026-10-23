@@ -151,10 +151,13 @@ Then, in the code:
 LG and Samsung: the web app above. Other TVs that don't run Google TV or Android TV: the way is a Google TV streamer on
 HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set Free My TV up on the streamer.
 
-**Uninstalled while in Free My TV mode?** The apps it turned off stay off. Bring them back with
-`adb shell pm enable <package>` (the `DEBLOAT` list and the stock home screen), then
-`adb shell cmd package set-home-activity <stock home activity>` and
-`adb shell settings put secure screensaver_components <stock screensaver>`.
+**Uninstalled while in Free My TV mode?** The apps it turned off stay off. Installing it again and picking *Original*
+brings them back (their list is in `adb shell settings get global free_my_tv_disabled`). By hand: `adb shell pm enable
+<package>` for each one, then `adb shell cmd package set-home-activity <stock home activity>` and
+`adb shell settings put secure screensaver_components <stock screensaver>`. If `settings get global
+free_my_tv_animations` shows three values, they are the TV's `window_animation_scale`, `transition_animation_scale` and
+`animator_duration_scale` from before: put each back (`settings put global <name> <value>`; `null` means
+`settings delete global <name>`), then `settings delete global free_my_tv_animations`.
 
 ## The code
 
@@ -175,6 +178,17 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   size, so both draw pixel for pixel.
 - `HomeMode` runs every switch as a background job (`ModeJob`) in the main process; the UI is in the `:home`
   process. `Watchdog` goes back to the stock home screen after 3 crashes in 5 minutes.
+- *Speed* (`Speed`, and its screens in `SettingsActivity`): the person's choices (apps to turn off or keep on, the
+  Assistant, the animations) are in `speed-choices.json`, written only by `:home`; `HomeMode.reconcile` applies them
+  in the main process (`ModeJob.SPEED`, 1.5 s after the last change, and at every switch and boot check), and only in
+  Free My TV mode. The apps it offers come from `speed-apps.json`, made by `ModeJob.SCAN` through the TV's ADB. An app
+  turned off there goes in `disabled` like a `DEBLOAT` one, so *Original* brings it back; one turned back on there is
+  enabled only if Free My TV turned it off. The TV's animation scales are saved in `settings global
+  free_my_tv_animations` before the first change; *Normal* and *Original* put them back. *Lighter home screen*
+  (`Lighter`, `Prefs.lighter`, in `:home`): no drawer, All Apps, background or day/night transitions, quicker
+  springs, the other tabs' photos neither preloaded nor kept while the home screen is hidden, and a still
+  screensaver. *Automatic* turns it on for low-RAM TVs, under 2.5 GB, Android 10 and older, or a 720p UI.
+  After an update, in Free My TV mode, the app compiles itself once with `cmd package compile -m speed`.
 - On-screen text: `Ui.tr("English")`, translated from `app/assets/i18n/<lang>.json` (keyed by the English; one
   HashMap lookup, English when a language lacks it). Text built at runtime is a pattern: `Ui.trf("{n} min ago", "n", 12)`,
   never concatenated words. A key `"context|Text"` is the same English where a language may need another word
@@ -234,3 +248,6 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   *Original* can bring it back.
 - Don't change the TV's picture, sound, network or account settings.
 - Keep the way back working: the *Original* mode and the watchdog.
+- *Speed* offers only apps that open from a launcher and the `DEBLOAT` apps, never system-uid or persistent ones (a
+  crash loop there can make Android offer a factory reset), home screens, TV inputs, keyboards, accessibility or
+  Wi-Fi-owning apps (`Speed.lock`, checked again before every change). Keep it that way.

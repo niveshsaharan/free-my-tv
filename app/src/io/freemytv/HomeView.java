@@ -389,6 +389,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sheetLayer.setVisibility(INVISIBLE);
         scene.setMotion(0.6f, 0f);
         updatePalette();
+        Lighter.on();   // the springs' pace
         // First time: right away (a cold start opens with the apps already there); missing logos come from reload(),
         // and so does the drawer (it isn't on screen yet).
         HomeApps.refreshLaunchable(a);
@@ -447,7 +448,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * make again goes, so the home process stays small and isn't the one killed. It all comes back on return.
      */
     void trim(int level) {
-        if (level < ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) return;
+        // The lighter home screen lets them go as soon as it's out of sight.
+        if (level < (Lighter.on() ? ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN : ComponentCallbacks2.TRIM_MEMORY_BACKGROUND)) return;
         recs.trim();        // the other tabs' photos (Explore's stay: Home opens there)
         if (level < ComponentCallbacks2.TRIM_MEMORY_MODERATE) return;
         HomeApps.releaseTiles();
@@ -661,6 +663,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         heroMoving |= topMoving | cardsMoving;
         boolean drawerItemsMoving = step(drawerFocus, dt);
         boolean gridMoving = step(gridFocus, dt) | scroll.step(dt);
+        // The lighter home screen: the drawer and All Apps open and close at once.
+        if (Lighter.on() && (drawer.value != drawer.target || sheet.value != sheet.target)) {
+            drawer.snap(drawer.target);
+            sheet.snap(sheet.target);
+            motionDirty = true;
+            sky.invalidate();       // its veil follows the drawer
+            platter.invalidate();   // the glass shelf, where the drawer left it
+        }
         boolean drawerMoving = drawer.step(dt);
         boolean sheetMoving = sheet.step(dt);
         boolean toastFading = tickToast(up);
@@ -842,7 +852,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // In the middle of another swap, start from whichever is more visible.
         if (bgFadeAt == 0 || fadeEase(bgFadeAt, up) >= 0.5f) bgFrom = bgTo;
         bgTo = b;
-        bgFadeAt = up;
+        bgFadeAt = Lighter.on() ? up - FADE_MS : up;   // lighter: the next frame shows the new one
         nightPair = false;
         if (b == null || glassOf(b) == null) return;
         if (bgFrom == null || glassOf(bgFrom) == null) {
@@ -896,7 +906,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean want = data.isNight(System.currentTimeMillis());
         if (want == nightTarget) return;
         nightTarget = want;
-        if (animate && running) {
+        if (animate && running && !Lighter.on()) {
             nightFrom = night;
             nightAt = SystemClock.uptimeMillis();
         } else {
@@ -2675,7 +2685,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
         }
         // What the cards show (the picks, their texts, whether their photos are ready): redrawn only when it changes.
-        // These photos are asked for first, then the other tabs' (preloaded: switching tabs is instant).
+        // These photos are asked for first, then the other tabs' (preloaded: switching tabs is instant), except on the
+        // lighter home screen, which keeps only what's on screen.
         int signature = tab;
         for (Recs.Pick p : cards) {
             signature = signature * 31 + p.id;
@@ -2684,7 +2695,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             signature = signature * 31 + java.util.Objects.hashCode(p.meta);
             signature = signature * 31 + (recs.backdrop(p) != null ? 1 : 0);
         }
-        for (Recs.Pick p : recs.wanted()) recs.backdrop(p);
+        if (!Lighter.on()) for (Recs.Pick p : recs.wanted()) recs.backdrop(p);
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(0));
         if (cards.isEmpty() || b != null) showBackdrop(b);
         if (signature == cardsSignature) return;

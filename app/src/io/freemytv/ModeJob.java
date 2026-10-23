@@ -13,7 +13,9 @@ import android.os.PersistableBundle;
  * the switch finishes, even with the screen showing something else.
  */
 public class ModeJob extends JobService {
-    static final String APPLY = "apply", VERIFY = "verify", REVERT = "revert", MEMORY = "memory", REMOTE = "remote";
+    // Each action's job id comes from its name (schedule): a new one must not share an id with these.
+    static final String APPLY = "apply", VERIFY = "verify", REVERT = "revert", MEMORY = "memory", REMOTE = "remote",
+            SPEED = "speed", SCAN = "scan";
 
     @Override public boolean onStartJob(JobParameters params) {
         PersistableBundle extras = params.getExtras();
@@ -28,6 +30,8 @@ public class ModeJob extends JobService {
                     case REVERT: HomeMode.revertHomeNow(app); break;
                     case MEMORY: HomeMode.measureMemoryNow(app, mode); break;
                     case REMOTE: HomeMode.ensureRemoteServiceNow(app); break;
+                    case SPEED: HomeMode.speedNow(app); break;
+                    case SCAN: Speed.scanNow(app); break;
                     default: break;
                 }
             } catch (Throwable t) {

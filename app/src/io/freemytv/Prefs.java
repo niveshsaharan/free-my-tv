@@ -122,6 +122,16 @@ final class Prefs {
     static boolean coin(int i) { return sp().getBoolean("coin" + i, true); }
     static void setCoin(int i, boolean on) { put("coin" + i, on); }
 
+    // MARK: - Lighter home screen (Speed)
+
+    /** "auto" (on for smaller TVs: Lighter.small), "on" or "off". */
+    static String lighter() {
+        String v = sp().getString("lighter", "auto");
+        return v.equals("on") || v.equals("off") ? v : "auto";
+    }
+
+    static void setLighter(String v) { put("lighter", v); }
+
     // MARK: - Shelf
 
     /** Packages on the home shelf, in order; null until the user edits it (then the built-in list applies). */

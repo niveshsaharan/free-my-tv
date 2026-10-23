@@ -113,7 +113,14 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5;
+        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5,
+                SPEED = 6, SPEED_APPS = 7;
+        // The main list's rows.
+        private static final int ROW_HOME = 0, ROW_SAVER = 1, ROW_SETTINGS = 2, ROW_SHELF = 3, ROW_KEYS = 4, ROW_SPEED = 5,
+                ROW_TV = 6, MAIN_ROWS = 7;
+        /** Speed: turn off apps, the Assistant, the animations, the lighter home screen. */
+        private static final int SPEED_ROWS = 4;
+        private static final String[] ANIMATIONS = {Speed.NORMAL, Speed.FASTER, Speed.OFF}, LIGHTER = {"auto", "on", "off"};
         private static final float LIST_ROW_H = 68, LIST_ROW_GAP = 6;
         private static final int PICK_VISIBLE = 9;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 74, ROW_GAP = 8, CHOICE_H = 104;
@@ -147,6 +154,15 @@ public class SettingsActivity extends Activity {
         private Paint title, subtitle, version, rowLabel, rowValue, rowSub, header, cellLabel, cellValue, warn, spinner, white, shadow;
         private TextPaint notice;
         private final String versionLine;   // asked once: PackageManager is a round trip to the system
+        // Speed: the person's choices, and the app list the main process makes (read again when it changes).
+        private JSONObject speedChoices = new JSONObject(), speedList = new JSONObject();
+        private final List<JSONObject> speedApps = new ArrayList<>();
+        private long speedListStamp = Long.MIN_VALUE, scanAskedAt, scanAskedUp;
+        private Paint speedHeading, speedMb;
+        private TextPaint speedHint, speedFit;
+        // Hints under the Speed lists, wrapped (translations run longer): made again only when their text changes.
+        private final StaticLayout[] hints = new StaticLayout[2];
+        private final String[] hintsShown = new String[2];
 
         private final Runnable poll = new Runnable() {
             @Override public void run() {
@@ -163,8 +179,9 @@ public class SettingsActivity extends Activity {
                     if (newest != null) announceForAccessibility(newest.optString("text"));
                 }
                 wasBusy = nowBusy;
+                if (screen == SPEED || screen == SPEED_APPS) loadSpeedList();
                 invalidate();
-                handler.postDelayed(this, busy() ? 500 : 2000);
+                handler.postDelayed(this, busy() || speedLoading() ? 500 : 2000);
             }
         };
 
@@ -177,6 +194,7 @@ public class SettingsActivity extends Activity {
             scene.setMotion(0.5f, 0.2f);
             scene.applyPalette();
             versionLine = versionName(a);
+            Lighter.on();
             setFocusable(true);
             setContentDescription("Free My TV");
             // TalkBack: one item per row, id = row + 1.
@@ -212,8 +230,19 @@ public class SettingsActivity extends Activity {
                         return Ui.trf("Home Screen, {mode}", "mode", value);
                     }
                     String[] names = {Ui.tr("Screensaver, preview"), Ui.tr("Home Settings"),
-                            Ui.tr("Shelf"), Ui.tr("Remote Buttons"), Ui.tr("TV Settings")};
+                            Ui.tr("Shelf"), Ui.tr("Remote Buttons"), Ui.tr("Speed"), Ui.tr("TV Settings")};
                     return row - 1 < names.length ? names[row - 1] : "";
+                }
+                case SPEED: {
+                    String[] labels = speedLabels(), values = speedValues();
+                    return row < labels.length ? labels[row] + (values[row].isEmpty() ? "" : ", " + values[row]) : "";
+                }
+                case SPEED_APPS: {
+                    int at = pickScroll + row;
+                    if (at >= speedApps.size()) return "";
+                    JSONObject app = speedApps.get(at);
+                    return app.optString("label") + ", " + speedAppValue(app) + ", "
+                            + Ui.trf("{i} of {n}", "i", at + 1, "n", speedApps.size());
                 }
                 case HOME_CHOICE: {
                     String name = row == 0 ? "Free My TV, " + Ui.tr("no ads, with the new screensaver")
@@ -317,6 +346,12 @@ public class SettingsActivity extends Activity {
             white.setColor(0xFFF5F5F7);
             shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
             shadow.setMaskFilter(new BlurMaskFilter(22 * k, BlurMaskFilter.Blur.NORMAL));
+            speedHeading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
+            speedHint = new TextPaint(Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF));
+            speedFit = new TextPaint(rowLabel);
+            java.util.Arrays.fill(hints, null);
+            speedMb = Ui.numbers(Ui.regular, 23 * k, 0x8CFFFFFF);
+            speedMb.setTextAlign(Paint.Align.RIGHT);
         }
 
         private boolean busy() {
@@ -335,8 +370,10 @@ public class SettingsActivity extends Activity {
 
         private int rowCount() {
             switch (screen) {
-                case MAIN: return 6;
+                case MAIN: return MAIN_ROWS;
                 case HOME_CHOICE: return 2;
+                case SPEED: return SPEED_ROWS;
+                case SPEED_APPS: return Math.min(PICK_VISIBLE, speedApps.size());
                 case HOME_SETTINGS: return settingLabels().length;
                 case PICKER: return Math.min(PICK_VISIBLE, pickLabels.size());
                 case SHELF_EDIT: return Math.min(PICK_VISIBLE, shelfRows.size());
@@ -368,7 +405,7 @@ public class SettingsActivity extends Activity {
             c.drawText(Ui.tr("Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
             c.drawText(versionLine, cx, 704 * k, version);
 
-            if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else if (screen == SHELF_EDIT) drawShelfEditor(c); else drawList(c);
+            if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else if (screen == SHELF_EDIT) drawShelfEditor(c); else if (screen == SPEED) drawSpeed(c); else if (screen == SPEED_APPS) drawSpeedApps(c); else drawList(c);
         }
 
         private void drawMain(Canvas c, float seconds) {
@@ -377,9 +414,9 @@ public class SettingsActivity extends Activity {
             String mode = freeActive() ? "Free My TV" : Ui.tr("Original");
             String[] labels = {Ui.tr("Home Screen"), Ui.tr("Screensaver"),
                     Ui.tr("Home Settings"), Ui.tr("Shelf"),
-                    Ui.tr("Remote Buttons"), Ui.tr("TV Settings")};
-            String[] values = {working ? "" : mode, Ui.tr("Preview"), "", "", "", ""};
-            for (int i = 0; i < 6; i++) {
+                    Ui.tr("Remote Buttons"), Ui.tr("Speed"), Ui.tr("TV Settings")};
+            String[] values = {working ? "" : mode, Ui.tr("Preview"), "", "", "", "", ""};
+            for (int i = 0; i < MAIN_ROWS; i++) {
                 float y = (LIST_TOP + i * (ROW_H + ROW_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
                 float f = drawRowBackground(c, i);
@@ -388,7 +425,7 @@ public class SettingsActivity extends Activity {
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
                 float right = rowRect.right - 30 * k;
-                if (i >= 2) {
+                if (i >= ROW_SETTINGS) {
                     float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
                     Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(0x66FFFFFF, 0x991C1C1E, f));
                 } else if (i == 0 && working) {
@@ -406,7 +443,7 @@ public class SettingsActivity extends Activity {
                 }
             }
 
-            float y = (LIST_TOP + 6 * (ROW_H + ROW_GAP) + 20) * k;
+            float y = (LIST_TOP + MAIN_ROWS * (ROW_H + ROW_GAP) + 20) * k;
             String error = state.optString("error");
             if (working && busyText.equals(Ui.tr("Accept “Allow USB debugging?” on the TV (tick “Always allow”)."))) {
                 c.drawText(Ui.tr("On the TV: tick “Always allow” and press OK."),
@@ -426,7 +463,6 @@ public class SettingsActivity extends Activity {
                 c.restore();
                 y += errorLayout.getLineBaseline(errorLayout.getLineCount() - 1) - errorLayout.getLineBaseline(0) + 46 * k;
             }
-            y = drawComparison(c, y);
             y = drawRecs(c, y + 26 * k);
             drawNotices(c, y + 40 * k);
         }
@@ -586,6 +622,9 @@ public class SettingsActivity extends Activity {
                     } else if (down && (screen == HOME_SETTINGS || screen == REMOTE_KEYS)) {
                         adjust(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                         invalidate();
+                    } else if (down && screen == SPEED && focus > 0) {
+                        adjustSpeed(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+                        invalidate();
                     }
                     return true;
                 case KeyEvent.KEYCODE_DPAD_CENTER:
@@ -610,8 +649,12 @@ public class SettingsActivity extends Activity {
                             } else if (screen == PICKER) {
                                 focus = pickFor - 1;
                                 screen = REMOTE_KEYS;
+                            } else if (screen == SPEED_APPS) {
+                                focus = 0;
+                                screen = SPEED;
                             } else {
-                                focus = screen == HOME_SETTINGS ? 2 : screen == SHELF_EDIT ? 3 : screen == REMOTE_KEYS ? 4 : 0;
+                                focus = screen == HOME_SETTINGS ? ROW_SETTINGS : screen == SHELF_EDIT ? ROW_SHELF
+                                        : screen == REMOTE_KEYS ? ROW_KEYS : screen == SPEED ? ROW_SPEED : ROW_HOME;
                                 screen = MAIN;
                             }
                         }
@@ -805,11 +848,229 @@ public class SettingsActivity extends Activity {
         }
 
         private boolean scrolling() {
-            return screen == PICKER || screen == SHELF_EDIT;
+            return screen == PICKER || screen == SHELF_EDIT || screen == SPEED_APPS;
         }
 
         private int listSize() {
-            return screen == SHELF_EDIT ? shelfRows.size() : pickLabels.size();
+            return screen == SHELF_EDIT ? shelfRows.size() : screen == SPEED_APPS ? speedApps.size() : pickLabels.size();
+        }
+
+        // MARK: - Speed
+
+        private void openSpeed() {
+            speedChoices = Speed.choices(getContext());
+            loadSpeedList();
+            // A fresh list for the count, if the TV already allows our ADB (no surprise prompt on the TV).
+            if (state.optBoolean("adbAuthorized")) askScan();
+            screen = SPEED;
+            focus = 0;
+        }
+
+        private void openSpeedApps() {
+            speedChoices = Speed.choices(getContext());
+            askScan();
+            loadSpeedList();
+            pickScroll = 0;
+            focus = 0;
+            screen = SPEED_APPS;
+        }
+
+        /** The main process makes the list (it needs the TV's ADB); the screen shows the last one meanwhile. */
+        private void askScan() {
+            scanAskedAt = System.currentTimeMillis();
+            scanAskedUp = SystemClock.uptimeMillis();
+            ModeJob.schedule(getContext(), ModeJob.SCAN, null, 0);
+        }
+
+        /** A new list was asked for and hasn't come (for up to two minutes: the TV's permission prompt waits one). */
+        private boolean speedLoading() {
+            return (screen == SPEED || screen == SPEED_APPS) && scanAskedUp != 0
+                    && SystemClock.uptimeMillis() - scanAskedUp < 120_000 && speedList.optLong("at") < scanAskedAt;
+        }
+
+        /** Reads the list again when the main process wrote a new one, keeping the focus on the same app. */
+        private void loadSpeedList() {
+            long stamp = Speed.listStamp(getContext());
+            if (stamp == speedListStamp) return;
+            speedListStamp = stamp;
+            String focused = screen == SPEED_APPS && pickScroll + focus < speedApps.size()
+                    ? speedApps.get(pickScroll + focus).optString("pkg") : null;
+            speedList = Speed.list(getContext());
+            speedApps.clear();
+            JSONArray apps = speedList.optJSONArray("apps");
+            for (int i = 0; apps != null && i < apps.length(); i++) {
+                JSONObject app = apps.optJSONObject(i);
+                if (app != null) speedApps.add(app);
+            }
+            if (screen != SPEED_APPS) return;
+            int at = 0;
+            for (int i = 0; focused != null && i < speedApps.size(); i++) if (speedApps.get(i).optString("pkg").equals(focused)) at = i;
+            int visible = Math.min(PICK_VISIBLE, speedApps.size());
+            pickScroll = Math.max(0, Math.min(pickScroll, speedApps.size() - visible));
+            if (at < pickScroll) pickScroll = at;
+            else if (at >= pickScroll + visible) pickScroll = Math.max(0, at - visible + 1);
+            focus = speedApps.isEmpty() ? 0 : Math.min(at - pickScroll, visible - 1);
+            if (screen == SPEED_APPS) spoken.focusMoved();
+        }
+
+        private String[] speedLabels() {
+            return new String[] {Ui.tr("Turn off apps"), Ui.tr("Google Assistant"), Ui.tr("Animations"),
+                    Ui.tr("Lighter home screen")};
+        }
+
+        private String[] speedValues() {
+            String[] v = new String[SPEED_ROWS];
+            int off = 0;
+            for (JSONObject app : speedApps) if (app.optString("lock").isEmpty() && intendedOff(app)) off++;
+            v[0] = speedList.has("apps") ? Ui.plural("plural|one:{n} app off|other:{n} apps off", off) : "";
+            v[1] = onOff(!Speed.assistantOff(speedChoices));
+            String anim = Speed.animations(speedChoices);
+            v[2] = anim.equals(Speed.FASTER) ? Ui.tr("animations|Faster") : anim.equals(Speed.OFF) ? Ui.tr("animations|Off")
+                    : Ui.tr("animations|Normal");
+            String lighter = Prefs.lighter();
+            v[3] = lighter.equals("on") ? Ui.tr("On") : lighter.equals("off") ? Ui.tr("Off")
+                    : Ui.trf("lighter|Automatic ({state})", "state", onOff(Lighter.small()));
+            return v;
+        }
+
+        /** OK and → go forward, ← goes back (the Assistant just turns on or off). */
+        private void adjustSpeed(int dir) {
+            Context c = getContext();
+            if (focus == 1) {
+                Speed.setAssistant(c, Speed.assistantOff(speedChoices));
+            } else if (focus == 2) {
+                int at = java.util.Arrays.asList(ANIMATIONS).indexOf(Speed.animations(speedChoices));
+                Speed.setAnimations(c, ANIMATIONS[(at + dir + ANIMATIONS.length) % ANIMATIONS.length]);
+            } else if (focus == 3) {
+                int at = java.util.Arrays.asList(LIGHTER).indexOf(Prefs.lighter());
+                Prefs.setLighter(LIGHTER[(at + dir + LIGHTER.length) % LIGHTER.length]);
+            }
+            speedChoices = Speed.choices(c);
+        }
+
+        /** Whether the app is (or will be, in Free My TV mode) off: the person's choice, else the list's and the TV's. */
+        private boolean intendedOff(JSONObject app) {
+            String choice = Speed.app(speedChoices, app.optString("pkg"));
+            if (!choice.isEmpty()) return choice.equals(Speed.OFF);
+            return app.optBoolean("suggested") || app.optBoolean("off");
+        }
+
+        private String speedAppValue(JSONObject app) {
+            switch (app.optString("lock")) {
+                case Speed.WIFI: return Ui.tr("Keeps your Wi-Fi");
+                case Speed.KEYBOARD: return Ui.tr("Your keyboard");
+                case Speed.ACCESSIBILITY: return Ui.tr("Accessibility");
+                case Speed.CAST: return Ui.tr("Needed for casting");
+                case Speed.BEFORE: return Ui.tr("Off before Free My TV");
+                default: return intendedOff(app) ? Ui.tr("Off") : Ui.tr("On");
+            }
+        }
+
+        /** OK: off ⇄ on (a locked app stays as it is; its row says why). */
+        private void toggleSpeedApp() {
+            if (pickScroll + focus >= speedApps.size()) return;
+            JSONObject app = speedApps.get(pickScroll + focus);
+            if (!app.optString("lock").isEmpty()) return;
+            Speed.setApp(getContext(), app.optString("pkg"), intendedOff(app));
+            speedChoices = Speed.choices(getContext());
+            spoken.focusMoved();
+        }
+
+        private String speedHintFor(int row) {
+            switch (row) {
+                case 0: return Ui.tr("Apps you never use stop running and taking memory.");
+                case 1: return Ui.tr("Off: “Ok Google” and the remote's mic button stop working.");
+                case 2: return Ui.tr("Faster halves the TV's own animations; Off removes them.");
+                default: return Ui.tr("Instant menus and less memory in use. Automatic: on for smaller TVs.");
+            }
+        }
+
+        private void drawSpeed(Canvas c) {
+            float x = LIST_X * k + 30 * k;
+            c.drawText(Ui.tr("Speed"), x, (LIST_TOP - 24) * k, speedHeading);
+            String[] labels = speedLabels(), values = speedValues();
+            for (int i = 0; i < SPEED_ROWS; i++) {
+                float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
+                rowValue.setColor(blend(0xB3FFFFFF, 0xB31C1C1E, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel), right = rowRect.right - 30 * k;
+                c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
+                if (i == 0) {
+                    float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
+                    Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(0x66FFFFFF, 0x991C1C1E, f));
+                    right -= cw + 16 * k;
+                }
+                c.drawText(values[i], right, base, rowValue);
+            }
+            // Room for two lines each, so nothing below moves with the focus.
+            float y = (LIST_TOP + 20 + SPEED_ROWS * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
+            drawHint(c, 0, speedHintFor(focus), x, y);
+            drawHint(c, 1, Ui.tr("Part of Free My TV mode: Original puts it all back."), x, y + 84 * k);
+            drawComparison(c, y + 180 * k);
+        }
+
+        /** A hint on up to two lines, its first baseline at y. */
+        private void drawHint(Canvas c, int slot, String text, float x, float y) {
+            int width = Math.round(790 * k);
+            StaticLayout l = hints[slot];
+            if (l == null || !text.equals(hintsShown[slot]) || l.getWidth() != width) {
+                hintsShown[slot] = text;
+                hints[slot] = l = StaticLayout.Builder.obtain(text, 0, text.length(), speedHint, width)
+                        .setMaxLines(2).setEllipsize(TextUtils.TruncateAt.END).build();
+            }
+            c.save();
+            c.translate(x, y - l.getLineBaseline(0));
+            l.draw(c);
+            c.restore();
+        }
+
+        /** What the app list shows when it has no apps: looking, waiting for the TV's permission, an error, or none. */
+        private String speedMessage() {
+            if (speedList.optBoolean("waiting")) return Ui.tr("Accept “Allow USB debugging?” on the TV (tick “Always allow”).");
+            if (speedLoading() || !speedList.has("at")) return Ui.tr("Looking for apps…");
+            if (speedList.has("error")) return Ui.trf("Couldn't look for apps: {error}", "error", speedList.optString("error"));
+            return Ui.tr("No apps to turn off.");
+        }
+
+        private void drawSpeedApps(Canvas c) {
+            float x = LIST_X * k + 30 * k;
+            c.drawText(Ui.tr("Turn off apps"), x, (LIST_TOP - 24) * k, speedHeading);
+            if (speedApps.isEmpty()) {
+                drawHint(c, 1, speedMessage(), x, (LIST_TOP + 60) * k);
+                return;
+            }
+            int rows = rowCount();
+            for (int i = 0; i < rows; i++) {
+                JSONObject app = speedApps.get(pickScroll + i);
+                boolean locked = !app.optString("lock").isEmpty(), off = !locked && intendedOff(app);
+                float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
+                float f = drawRowBackground(c, i);
+                boolean dim = off || locked;
+                rowLabel.setColor(blend(dim ? 0x80FFFFFF : 0xF2FFFFFF, dim ? 0x801C1C1E : INK, f));
+                rowValue.setColor(blend(locked ? 0x73FFFFFF : 0xB3FFFFFF, locked ? 0x731C1C1E : 0xB31C1C1E, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel), right = rowRect.right - 30 * k;
+                String value = speedAppValue(app);
+                c.drawText(value, right, base, rowValue);
+                float used = rowValue.measureText(value);
+                long mb = app.optLong("mb");
+                if (mb > 0 && !off) {
+                    String size = Ui.trf("{n} MB", "n", mb);
+                    speedMb.setColor(blend(0x73FFFFFF, 0x731C1C1E, f));
+                    c.drawText(size, right - used - 28 * k, base, speedMb);
+                    used += 28 * k + speedMb.measureText(size);
+                }
+                // The name gets what the value leaves (a long name ends in "…").
+                float room = rowRect.width() - 60 * k - used - 30 * k;
+                c.drawText(TextUtils.ellipsize(app.optString("label"), speedFit, room, TextUtils.TruncateAt.END).toString(),
+                        rowRect.left + 30 * k, base, rowLabel);
+            }
+            float hy = (LIST_TOP + 20 + rows * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
+            String note = freeActive() ? Ui.tr("OK turns an app off or back on.")
+                    : Ui.tr("Saved: they go off when you switch to Free My TV.");
+            drawHint(c, 0, (pickScroll + focus + 1) + " / " + speedApps.size() + "  ·  " + note, x, hy);
         }
 
         // MARK: - Shelf editor
@@ -974,7 +1235,9 @@ public class SettingsActivity extends Activity {
             Context c = getContext();
             if (screen == HOME_CHOICE) {
                 boolean wantFree = focus == 0;
-                boolean already = wantFree ? freeActive() : HomeMode.ORIGINAL.equals(state.optString("mode", HomeMode.ORIGINAL));
+                // Original after a new install (no switch yet) still runs: an earlier install may have turned apps off.
+                boolean already = wantFree ? freeActive()
+                        : HomeMode.ORIGINAL.equals(state.optString("mode", HomeMode.ORIGINAL)) && state.has("since");
                 if (!already && !busy()) {
                     HomeMode.request(c, wantFree ? HomeMode.FREE : HomeMode.ORIGINAL);
                     pendingAt = SystemClock.uptimeMillis();
@@ -1000,6 +1263,16 @@ public class SettingsActivity extends Activity {
                 toggleShelfApp();
                 invalidate();
                 return;
+            } else if (screen == SPEED_APPS) {
+                toggleSpeedApp();
+                invalidate();
+                return;
+            } else if (screen == SPEED && focus == 0) {
+                openSpeedApps();
+            } else if (screen == SPEED) {
+                adjustSpeed(1);
+                invalidate();
+                return;
             } else if (screen == REMOTE_KEYS) {
                 openPicker(focus + 1);
             } else if (screen == HOME_SETTINGS && focus == 0) {
@@ -1011,23 +1284,25 @@ public class SettingsActivity extends Activity {
                 adjust(1);
                 invalidate();
                 return;
-            } else if (focus == 0) {
+            } else if (focus == ROW_HOME) {
                 if (busy()) return;
                 screen = HOME_CHOICE;
                 focus = freeActive() ? 0 : 1;
-            } else if (focus == 1) {
+            } else if (focus == ROW_SAVER) {
                 pause();
                 activity.showPreview();
-            } else if (focus == 2) {
+            } else if (focus == ROW_SETTINGS) {
                 screen = HOME_SETTINGS;
                 focus = 0;
-            } else if (focus == 3) {
+            } else if (focus == ROW_SHELF) {
                 openShelfEditor();
-            } else if (focus == 4) {
+            } else if (focus == ROW_KEYS) {
                 HomeMode.ensureRemoteService(c, 0);   // the buttons work from inside other apps through this service
                 loadApps();
                 screen = REMOTE_KEYS;
                 focus = 0;
+            } else if (focus == ROW_SPEED) {
+                openSpeed();
             } else {
                 activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             }

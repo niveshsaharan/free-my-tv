@@ -24,6 +24,7 @@ Open source. Built with Claude Code. One button to undo.
 - **Light by day, dark by night.** It follows your city's real sunset, the way your phone does.
 - **A screensaver to match.** Full-screen photos of the picks with a big glass clock.
 - **Fast.** 60 fps, every frame in 16.6 ms, on the TV's own chip. The home screen uses 96 MB of memory instead of 242 MB (−60%).<br><sub>Measured on a 98″ TCL Google TV running Android 14.</sub>
+- **Faster still, if you want.** *Free My TV* → *Speed* turns off the apps you never use, Google Assistant and the TV's slow animations, and has a lighter home screen for smaller TVs (on by itself there).
 - **Set up on the TV.** Language, your city, temperature, theme, the weather and prices cards, which coins, and the apps on the shelf, in Free My TV's own settings.
 - **Safe.** No root. Nothing is uninstalled. One button brings back the factory home screen.
 
@@ -116,7 +117,7 @@ The first values come from `config.properties`, created by the first build (Goog
 | `show_crypto` | Show Binance crypto prices on home and screensaver | `true` |
 | `currency` | Crypto prices in `USD`, `EUR`, `BRL`… | `USD` |
 | `temperature` | `C`, `F` or `auto` | `auto` |
-| `disable_assistant` | Also turn off Google Assistant | `false` |
+| `disable_assistant` | Also turn off Google Assistant (on the TV: *Speed* → *Google Assistant*) | `false` |
 | `hide_services` | Streaming services to leave out of the picks even when their app is on the TV (`netflix`, `prime`, `disney`…), comma separated; for apps the TV ships that you don't subscribe to. Google TV only | empty |
 
 Changed something? Run `./build.sh` and install again. Keep `freemytv.keystore`: updates are signed with it.
@@ -131,7 +132,7 @@ With a free [Watchmode](https://api.watchmode.com/) key (`watchmode_key=` in `co
 
 ## Going back
 
-On the TV: *Free My TV* → *Home Screen* → *Original*. The factory home screen, screensaver and every app come back exactly as they were. If the new home screen ever crashes three times in five minutes, it switches back by itself.
+On the TV: *Free My TV* → *Home Screen* → *Original*. The factory home screen, screensaver, every app and the TV's animations come back exactly as they were. If the new home screen ever crashes three times in five minutes, it switches back by itself.
 
 To remove it for good, switch to *Original* first, then uninstall *Free My TV* (Settings → Apps). Uninstalled it while it was on? Install it again and pick *Original*: the list of what it turned off is kept in the TV's settings, so everything comes back.
 
@@ -145,7 +146,9 @@ To remove it for good, switch to *Original* first, then uninstall *Free My TV* (
   - on Philco TVs, AI PONT (promo channels and app downloads) and the manual;
   - on Multilaser TVs, Anoki's screen-content recognition (ACR), the store demo and the manual;
   - on KTC-made TVs (NextStar), Anoki's screen-content recognition (ACR), the store demo and the manual;
-  - Google Assistant, only with `disable_assistant=true`.
+  - Google Assistant, only when you turn it off in *Speed* (or with `disable_assistant=true`);
+  - the apps you pick in *Free My TV* → *Speed* → *Turn off apps*. It offers only apps you can open and the promo apps above, never the TV's own pieces; apps that keep your Wi-Fi, your keyboard, accessibility apps, YouTube (casting from a phone opens it) and apps that were off before stay as they are.
+- *Speed* → *Animations* makes the TV's own animations twice as fast, or turns them off; *Normal* and *Original* bring back the TV's values.
 - On TCL TVs, the remote's Netflix, YouTube and Prime buttons keep working through a small accessibility service that only reads those buttons. Pick what each one opens in *Free My TV* → *Remote Buttons*; *Original* turns the service off. On Vestel-made TVs (F&U and other store brands) and Xiaomi (Formovie) projectors the same goes for the Netflix button, and on KTC-made TVs (NextStar) for the Tabii button. On Sony TVs, the BRAVIA CORE, Netflix, Disney+, Prime Video, YouTube and Crunchyroll buttons (and Google Play, on remotes that have it) can each open the app you pick, or keep Sony's default.
 - Picture, sound, inputs, remote pairing, Google services and the Play Store are on a protected list, checked before every change.
 - Apps that saved a Wi-Fi network are never turned off, since Android would erase the network. If the TV's first setup saved yours, the switch asks you to forget the network and connect again in Settings first (saved networks out of range don't show there; Claude Code can remove them).
@@ -194,6 +197,7 @@ It's your code, and Claude Code finds its way around it. Try:
 | [`DreamView.java`](app/src/io/freemytv/DreamView.java) | The screensaver |
 | [`SettingsActivity.java`](app/src/io/freemytv/SettingsActivity.java) | The settings screen (the app's icon) |
 | [`Prefs.java`](app/src/io/freemytv/Prefs.java) | Settings changed on the TV |
+| [`Speed.java`](app/src/io/freemytv/Speed.java) | The Speed screen's choices and the apps it offers |
 | [`RemoteKeys.java`](app/src/io/freemytv/RemoteKeys.java) | The TCL remote's app buttons |
 | [`Watchdog.java`](app/src/io/freemytv/Watchdog.java) | The safety net |
 | [`web/home.js`](web/home.js) | The home screen on LG TVs |

@@ -32,7 +32,7 @@ import java.util.concurrent.Executors;
  * The screensaver, in the same style as the home screen:
  *  - the recommendations' photos in full screen, one every 30 s, with a slow zoom and pan (the "Ken Burns" effect of
  *    the Apple TV photos) and a crossfade between them; each photo is loaded 10% larger than the screen, so the zoom
- *    never upscales it;
+ *    never upscales it. With the lighter home screen (Lighter) the photos stand still, and so does the drawing;
  *  - top right, like the iPhone lock screen: the date with the weather, the big Liquid Glass clock (the photo shows
  *    through the digits, bent at the edges; Shaders.GLASS_TEXT) and the compact prices;
  *  - bottom left, the photo's caption: the time-of-day label ("TONIGHT"), the title, and genre · runtime · service.
@@ -114,6 +114,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private final Set<String> failed = new HashSet<>();     // Recs.key: a movie and a series can have the same ID
     private RuntimeShader glassShader;
     private boolean running, dirty = true, chromeDirty = true;
+    private boolean still;          // the lighter home screen: no zoom or pan
     private boolean fallback;       // the aurora with the clock (no photos)
     private boolean decoding;
     private int generation, slides;
@@ -164,6 +165,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     void start() {
         if (running) return;
         running = true;
+        still = Lighter.on();
         if (worker.isShutdown()) worker = Executors.newSingleThreadExecutor();
         startedAt = clock();
         lastFrame = 0;
@@ -296,11 +298,13 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         decoding = true;
         final int gen = generation;
         final Recs.Pick chosen = pick;
+        // Still photos don't zoom: the screen's size is enough.
+        final int pw = still ? Backdrop.W : PW, ph = still ? Backdrop.H : PH;
         worker.execute(() -> {
             Bitmap[] images = null;
             float[] light = new float[2];
             try {
-                images = Backdrop.photo(file, PW, PH, light);
+                images = Backdrop.photo(file, pw, ph, light);
                 images[0] = Backdrop.gpu(withScrims(images[0], light[0], light[1]));
             } catch (Exception | OutOfMemoryError e) {
                 AppLog.w("screensaver: photo for “" + chosen.title + "”: " + e.getMessage());
@@ -376,7 +380,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     /** Photo position and scale now: zoom from 1 to 1.1 (or back) and a pan toward a corner, never showing an edge. */
     private void place(Slide s, long up, float[] out) {
         float u = Ui.clamp((up - s.startedAt) / (float) (SHOW_MS + FADE_MS));
-        float f = s.zoomIn ? u : 1 - u;
+        float f = still ? 0 : s.zoomIn ? u : 1 - u;
         float z = 1 + ZOOM * f;
         float rx = w * (z - 1) / 2, ry = h * (z - 1) / 2;
         out[0] = rx * (s.panX * f - 1);
@@ -398,7 +402,9 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
     @Override public void doFrame(long frameTimeNanos) {
         if (!running) return;
-        if (frameTimeNanos - lastFrame >= 45_000_000L) {
+        // Still photos: between crossfades nothing moves, and once a second keeps the clock and the next photo on time.
+        boolean idle = still && current != null && incoming == null && SystemClock.uptimeMillis() - firstAt >= FIRST_MS;
+        if (frameTimeNanos - lastFrame >= (idle ? 1_000_000_000L : 45_000_000L)) {
             lastFrame = frameTimeNanos;
             invalidate();
         }

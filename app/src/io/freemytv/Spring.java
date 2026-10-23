@@ -2,6 +2,9 @@ package io.freemytv;
 
 /** Damped spring, like macOS animations: response (s) and damping (1 = no bounce). */
 final class Spring {
+    /** Below 1, every spring settles sooner (the lighter home screen: Lighter). */
+    static float pace = 1;
+
     float value, velocity, target;
     private final float response, damping;
 
@@ -23,7 +26,7 @@ final class Spring {
             velocity = 0;
             return false;
         }
-        float omega = (float) (2 * Math.PI / response);
+        float omega = (float) (2 * Math.PI / (response * pace));
         float stiffness = omega * omega, friction = 2 * damping * omega;
         int steps = Math.max(1, (int) Math.ceil(dt / 0.004f));
         float h = dt / steps;
